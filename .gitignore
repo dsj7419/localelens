@@ -44,3 +44,8 @@ yarn-error.log*
 
 # idea files
 .idea
+# Generated / local artifacts
+/generated/
+/prisma/*.db
+db.sqlite
+
