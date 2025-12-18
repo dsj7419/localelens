@@ -232,7 +232,7 @@ export default function ProjectPage() {
               <Logo size="md" />
             </button>
             <Separator orientation="vertical" className="h-5" />
-            <span className="text-sm text-muted-foreground truncate max-w-[200px]">
+            <span className="text-sm text-muted-foreground truncate max-w-50">
               {project?.name}
             </span>
           </div>
