@@ -20,7 +20,10 @@
       "Bash(dir:*)",
       "Bash(del \"F:\\\\Projects\\\\OpenAIContests\\\\LocaleLens\\\\localelens\\\\pnpm-workspace.yaml\")",
       "Bash(del \"F:\\\\Projects\\\\OpenAIContests\\\\LocaleLens\\\\localelens\\\\nul\")",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "WebSearch",
+      "WebFetch(domain:ui.shadcn.com)",
+      "Bash(cat:*)"
     ]
   }
 }

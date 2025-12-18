@@ -30,8 +30,9 @@ interface ResultsStepCanvasProps {
   baseImageUrl: string | null;
   activeVariant: LocaleId | "original";
   showOverlay: boolean;
-  getVariantImageUrl: (locale: LocaleId) => string | null;
-  getOverlayImageUrl: (locale: LocaleId) => string | null;
+  variantImageUrl: string | null;
+  overlayImageUrl: string | null;
+  isLoadingVariant: boolean;
   canvasWidth: number;
   canvasHeight: number;
 }
@@ -72,14 +73,12 @@ export function ResultsStepCanvas({
   baseImageUrl,
   activeVariant,
   showOverlay,
-  getVariantImageUrl,
-  getOverlayImageUrl,
+  variantImageUrl,
+  overlayImageUrl,
+  isLoadingVariant,
   canvasWidth,
   canvasHeight,
 }: ResultsStepCanvasProps) {
-  const variantImageUrl = activeVariant !== "original" ? getVariantImageUrl(activeVariant as LocaleId) : null;
-  const overlayImageUrl = activeVariant !== "original" ? getOverlayImageUrl(activeVariant as LocaleId) : null;
-
   const scaledWidth = canvasWidth * 0.45;
   const scaledHeight = canvasHeight * 0.45;
 
@@ -117,6 +116,10 @@ export function ResultsStepCanvas({
             <div className="flex items-center justify-center h-full text-muted-foreground bg-muted/20">
               Select a variant from the sidebar
             </div>
+          ) : isLoadingVariant ? (
+            <div className="flex items-center justify-center h-full">
+              <div className="animate-spin h-6 w-6 border-2 border-primary border-t-transparent rounded-full" />
+            </div>
           ) : variantImageUrl ? (
             <img
               src={showOverlay && overlayImageUrl ? overlayImageUrl : variantImageUrl}
@@ -124,8 +127,8 @@ export function ResultsStepCanvas({
               className="w-full h-full object-contain"
             />
           ) : (
-            <div className="flex items-center justify-center h-full">
-              <div className="animate-spin h-6 w-6 border-2 border-primary border-t-transparent rounded-full" />
+            <div className="flex items-center justify-center h-full text-muted-foreground bg-muted/20">
+              Image not found
             </div>
           )}
         </div>

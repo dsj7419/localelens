@@ -86,39 +86,25 @@ export function useProjectQueries({ projectId, enabled = true }: UseProjectQueri
 }
 
 /**
- * useVariantImages Hook
+ * useVariantImage Hook
  *
- * Fetches variant and overlay images for results display.
- * Separated from main queries due to dynamic nature.
+ * Fetches a single variant image and overlay.
+ * Call this hook for the currently selected variant only.
  */
-export function useVariantImages(projectId: string, variants: Array<{ locale: LocaleId }>) {
-  // Create queries for each variant's image
-  const variantQueries = variants.map((v) =>
-    // eslint-disable-next-line react-hooks/rules-of-hooks
-    api.project.getVariantImage.useQuery({ projectId, locale: v.locale })
+export function useVariantImage(projectId: string, locale: LocaleId | null) {
+  const variantQuery = api.project.getVariantImage.useQuery(
+    { projectId, locale: locale! },
+    { enabled: !!locale }
   );
 
-  const overlayQueries = variants.map((v) =>
-    // eslint-disable-next-line react-hooks/rules-of-hooks
-    api.variant.getOverlay.useQuery({ projectId, locale: v.locale })
+  const overlayQuery = api.variant.getOverlay.useQuery(
+    { projectId, locale: locale! },
+    { enabled: !!locale }
   );
-
-  const getVariantImageUrl = (locale: LocaleId): string | null => {
-    const index = variants.findIndex((v) => v.locale === locale);
-    if (index === -1) return null;
-    return variantQueries[index]?.data?.imageBase64 ?? null;
-  };
-
-  const getOverlayImageUrl = (locale: LocaleId): string | null => {
-    const index = variants.findIndex((v) => v.locale === locale);
-    if (index === -1) return null;
-    return overlayQueries[index]?.data?.overlayBase64 ?? null;
-  };
 
   return {
-    variantQueries,
-    overlayQueries,
-    getVariantImageUrl,
-    getOverlayImageUrl,
+    imageUrl: variantQuery.data?.imageBase64 ?? null,
+    overlayUrl: overlayQuery.data?.overlayBase64 ?? null,
+    isLoading: variantQuery.isLoading || overlayQuery.isLoading,
   };
 }

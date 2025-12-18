@@ -28,7 +28,7 @@ import {
 } from "~/components/project/steps";
 import {
   useProjectQueries,
-  useVariantImages,
+  useVariantImage,
   useProjectMutations,
   useMaskEditor,
   useWorkflow,
@@ -50,7 +50,6 @@ export default function ProjectPage() {
   // ─────────────────────────────────────────────────────────────────────────────
 
   const queries = useProjectQueries({ projectId });
-  const variantImages = useVariantImages(projectId, queries.variants);
 
   // ─────────────────────────────────────────────────────────────────────────────
   // State Management (Hooks)
@@ -64,6 +63,10 @@ export default function ProjectPage() {
 
   const maskEditor = useMaskEditor();
   const results = useResultsState();
+
+  // Fetch selected variant image (only when a locale is selected)
+  const selectedLocale = results.activeVariant !== "original" ? results.activeVariant as LocaleId : null;
+  const variantImage = useVariantImage(projectId, selectedLocale);
 
   // Generation state (kept local for progress tracking)
   const [selectedLocales, setSelectedLocales] = useState<LocaleId[]>([...SUPPORTED_LOCALES]);
@@ -141,16 +144,16 @@ export default function ProjectPage() {
 
   const handleDownloadVariant = useCallback(
     (locale: LocaleId) => {
-      const imageUrl = variantImages.getVariantImageUrl(locale);
-      if (!imageUrl) return;
+      // Download currently displayed variant (must be selected first)
+      if (locale !== selectedLocale || !variantImage.imageUrl) return;
       const link = document.createElement("a");
-      link.href = imageUrl;
+      link.href = variantImage.imageUrl;
       link.download = `localelens_${locale}.png`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
     },
-    [variantImages]
+    [selectedLocale, variantImage.imageUrl]
   );
 
   const handleDownloadOriginal = useCallback(() => {
@@ -298,8 +301,9 @@ export default function ProjectPage() {
             baseImageUrl={queries.baseImageUrl}
             activeVariant={results.activeVariant}
             showOverlay={results.showOverlay}
-            getVariantImageUrl={variantImages.getVariantImageUrl}
-            getOverlayImageUrl={variantImages.getOverlayImageUrl}
+            variantImageUrl={variantImage.imageUrl}
+            overlayImageUrl={variantImage.overlayUrl}
+            isLoadingVariant={variantImage.isLoading}
             canvasWidth={CANVAS_WIDTH}
             canvasHeight={CANVAS_HEIGHT}
           />

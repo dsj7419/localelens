@@ -4,7 +4,7 @@
  * Re-exports all custom hooks for clean imports.
  */
 
-export { useProjectQueries, useVariantImages } from "./useProjectQueries";
+export { useProjectQueries, useVariantImage } from "./useProjectQueries";
 export { useProjectMutations } from "./useProjectMutations";
 export { useMaskEditor } from "./useMaskEditor";
 export { useWorkflow } from "./useWorkflow";
