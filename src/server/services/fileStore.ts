@@ -139,6 +139,16 @@ export class FileStore {
   }
 
   /**
+   * Delete mask image file
+   */
+  async deleteMaskImage(): Promise<void> {
+    const filePath = this.getPaths().mask;
+    if (await this.fileExists(filePath)) {
+      await fs.unlink(filePath);
+    }
+  }
+
+  /**
    * Get variant image buffer for a specific locale
    */
   async getVariantImage(locale: string): Promise<Buffer | null> {

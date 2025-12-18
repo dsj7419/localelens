@@ -1,214 +1,173 @@
+/**
+ * Project Page
+ *
+ * Main project workflow page with sidebar + canvas layout.
+ * Uses custom hooks for state management and step components for rendering.
+ */
+
 "use client";
 
 import { useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { api } from "~/trpc/react";
-import { toast } from "sonner";
-import { Button } from "~/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "~/components/ui/card";
-import { Badge } from "~/components/ui/badge";
-import { Progress } from "~/components/ui/progress";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
-import { Separator } from "~/components/ui/separator";
-import { MaskCanvas } from "~/components/project/MaskCanvas";
-import { LocaleSelector } from "~/components/project/LocaleSelector";
-import { VariantViewer } from "~/components/project/VariantViewer";
-import { SUPPORTED_LOCALES, type LocaleId } from "~/server/domain/value-objects/locale";
-import { Image, PaintBucket, Sparkles } from "lucide-react";
-import { Logo } from "~/components/Logo";
 
-type WorkflowTab = "upload" | "mask" | "generate" | "results";
+import { ScrollArea } from "~/components/ui/scroll-area";
+import { Badge } from "~/components/ui/badge";
+import { Separator } from "~/components/ui/separator";
+
+import { Logo } from "~/components/Logo";
+import { StepProgress } from "~/components/project/StepProgress";
+import {
+  UploadStepSidebar,
+  UploadStepCanvas,
+  MaskStepSidebar,
+  MaskStepCanvas,
+  GenerateStepSidebar,
+  GenerateStepCanvas,
+  ResultsStepSidebar,
+  ResultsStepCanvas,
+} from "~/components/project/steps";
+import {
+  useProjectQueries,
+  useVariantImages,
+  useProjectMutations,
+  useMaskEditor,
+  useWorkflow,
+  useResultsState,
+} from "~/hooks";
+import { SUPPORTED_LOCALES, type LocaleId } from "~/server/domain/value-objects/locale";
+
+// Canvas dimensions
+const CANVAS_WIDTH = 540;
+const CANVAS_HEIGHT = 960;
 
 export default function ProjectPage() {
   const params = useParams();
   const router = useRouter();
   const projectId = params.id as string;
 
-  const [activeTab, setActiveTab] = useState<WorkflowTab>("upload");
-  const [selectedLocales, setSelectedLocales] = useState<LocaleId[]>([
-    ...SUPPORTED_LOCALES,
-  ]);
-  const [isGenerating, setIsGenerating] = useState(false);
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Data Layer (Queries)
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  const queries = useProjectQueries({ projectId });
+  const variantImages = useVariantImages(projectId, queries.variants);
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // State Management (Hooks)
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  const workflow = useWorkflow({
+    hasBaseImage: queries.hasBaseImage,
+    hasMask: queries.hasMask,
+    hasVariants: queries.hasVariants,
+  });
+
+  const maskEditor = useMaskEditor();
+  const results = useResultsState();
+
+  // Generation state (kept local for progress tracking)
+  const [selectedLocales, setSelectedLocales] = useState<LocaleId[]>([...SUPPORTED_LOCALES]);
   const [generationProgress, setGenerationProgress] = useState(0);
   const [isDemoMode, setIsDemoMode] = useState(false);
 
-  // Fetch project data
-  const { data: projectData, refetch: refetchProject } =
-    api.project.get.useQuery({ projectId }, { enabled: !!projectId });
-
-  const { data: baseImageData, refetch: refetchBaseImage } =
-    api.project.getBaseImage.useQuery({ projectId }, { enabled: !!projectId });
-
-  const { data: maskData, refetch: refetchMask } = api.project.getMask.useQuery(
-    { projectId },
-    { enabled: !!projectId }
-  );
-
+  // ─────────────────────────────────────────────────────────────────────────────
   // Mutations
-  const uploadBaseImage = api.project.uploadBaseImage.useMutation({
-    onSuccess: () => {
-      toast.success("Base image uploaded");
-      void refetchProject();
-      void refetchBaseImage();
-      setActiveTab("mask");
-    },
-    onError: (error) => {
-      toast.error("Upload failed", { description: error.message });
-    },
-  });
+  // ─────────────────────────────────────────────────────────────────────────────
 
-  const saveMask = api.project.saveMask.useMutation({
-    onSuccess: () => {
-      toast.success("Mask saved");
-      void refetchProject();
-      void refetchMask();
-      setActiveTab("generate");
+  const mutations = useProjectMutations({
+    projectId,
+    onProjectChange: () => void queries.refetchProject(),
+    onBaseImageChange: () => void queries.refetchBaseImage(),
+    onMaskChange: async () => {
+      const result = await queries.refetchMask();
+      if (result.data?.maskBase64) {
+        maskEditor.loadMask(result.data.maskBase64);
+      }
     },
-    onError: (error) => {
-      toast.error("Save failed", { description: error.message });
+    onVariantsChange: () => void queries.refetchProject(),
+    onGenerationComplete: (successCount, totalCount) => {
+      setGenerationProgress(100);
+      workflow.goToResults();
+      if (successCount > 0) {
+        results.selectFirstVariant(selectedLocales);
+      }
     },
-  });
-
-  const loadDemoBaseImage = api.project.loadDemoBaseImage.useMutation({
-    onSuccess: () => {
-      toast.success("Demo base image loaded");
-      void refetchProject();
-      void refetchBaseImage();
-    },
-    onError: (error) => {
-      toast.error("Load failed", { description: error.message });
-    },
-  });
-
-  const loadDemoMask = api.project.loadDemoMask.useMutation({
-    onSuccess: () => {
-      toast.success("Demo mask loaded");
-      void refetchProject();
-      void refetchMask();
-    },
-    onError: (error) => {
-      toast.error("Load failed", { description: error.message });
-    },
-  });
-
-  const generateVariants = api.variant.generateAll.useMutation({
-    onMutate: () => {
-      setIsGenerating(true);
+    onGenerationError: () => {
       setGenerationProgress(0);
     },
-    onSuccess: (data) => {
-      setIsGenerating(false);
-      setGenerationProgress(100);
-      void refetchProject();
-
-      if (data.successCount === data.totalCount) {
-        toast.success("All variants generated successfully!");
-      } else {
-        toast.warning(
-          `Generated ${data.successCount}/${data.totalCount} variants`
-        );
-      }
-      setActiveTab("results");
-    },
-    onError: (error) => {
-      setIsGenerating(false);
-      // Check if this is an API unavailability error
-      const errorMsg = error.message.toLowerCase();
-      if (
-        errorMsg.includes("403") ||
-        errorMsg.includes("forbidden") ||
-        errorMsg.includes("rate limit") ||
-        errorMsg.includes("quota") ||
-        errorMsg.includes("billing")
-      ) {
-        toast.error("API unavailable", {
-          description: "Try Demo Mode to see pre-generated outputs",
-        });
-      } else {
-        toast.error("Generation failed", { description: error.message });
-      }
-    },
   });
 
-  const loadDemoOutputs = api.variant.loadDemoOutputs.useMutation({
-    onMutate: () => {
-      setIsGenerating(true);
-      setIsDemoMode(true);
-    },
-    onSuccess: (data) => {
-      setIsGenerating(false);
-      void refetchProject();
-
-      if (data.successCount === data.totalCount) {
-        toast.success("Demo outputs loaded successfully!");
-      } else {
-        toast.warning(
-          `Loaded ${data.successCount}/${data.totalCount} demo outputs`
-        );
-      }
-      setActiveTab("results");
-    },
-    onError: (error) => {
-      setIsGenerating(false);
-      toast.error("Demo mode failed", { description: error.message });
-    },
-  });
-
+  // ─────────────────────────────────────────────────────────────────────────────
   // Handlers
-  const handleFileUpload = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
+  // ─────────────────────────────────────────────────────────────────────────────
 
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const base64 = event.target?.result as string;
-        uploadBaseImage.mutate({ projectId, imageBase64: base64 });
-      };
-      reader.readAsDataURL(file);
-    },
-    [projectId, uploadBaseImage]
-  );
-
-  const handleSaveMask = useCallback(
-    (maskDataUrl: string) => {
-      saveMask.mutate({ projectId, maskBase64: maskDataUrl });
-    },
-    [projectId, saveMask]
-  );
+  const handleLocaleToggle = useCallback((locale: LocaleId) => {
+    setSelectedLocales((prev) =>
+      prev.includes(locale) ? prev.filter((l) => l !== locale) : [...prev, locale]
+    );
+  }, []);
 
   const handleGenerate = useCallback(() => {
-    if (selectedLocales.length === 0) {
-      toast.error("Select at least one locale");
-      return;
-    }
     setIsDemoMode(false);
-    generateVariants.mutate({ projectId, locales: selectedLocales });
-  }, [projectId, selectedLocales, generateVariants]);
+    setGenerationProgress(0);
+    mutations.handleGenerate(selectedLocales);
+  }, [selectedLocales, mutations]);
 
   const handleDemoMode = useCallback(() => {
-    if (selectedLocales.length === 0) {
-      toast.error("Select at least one locale");
-      return;
+    setIsDemoMode(true);
+    setGenerationProgress(0);
+    mutations.handleDemoMode(selectedLocales);
+  }, [selectedLocales, mutations]);
+
+  const handleSaveMask = useCallback(() => {
+    mutations.handleSaveMask(() => maskEditor.save());
+  }, [mutations, maskEditor]);
+
+  const handleLoadDemoMask = useCallback(() => {
+    if (maskEditor.hasChanges) {
+      if (!confirm("You have unsaved changes. Load demo mask anyway?")) {
+        return;
+      }
     }
-    loadDemoOutputs.mutate({ projectId, locales: selectedLocales });
-  }, [projectId, selectedLocales, loadDemoOutputs]);
+    mutations.loadDemoMask.mutate({ projectId });
+  }, [projectId, mutations, maskEditor.hasChanges]);
 
-  // Derived state
-  const project = projectData?.aggregate?.project;
-  const variants = projectData?.aggregate?.variants ?? [];
-  const hasBaseImage = !!project?.baseImagePath;
-  const hasMask = !!projectData?.aggregate?.mask;
-  const baseImageUrl = baseImageData?.imageBase64 ?? null;
-  const maskUrl = maskData?.maskBase64 ?? null;
+  const handleDeleteMask = useCallback(() => {
+    if (confirm("Delete the saved mask and start over? This cannot be undone.")) {
+      mutations.deleteMask.mutate({ projectId });
+      maskEditor.clearCanvas();
+    }
+  }, [projectId, mutations, maskEditor]);
 
-  if (!projectData) {
+  const handleDownloadVariant = useCallback(
+    (locale: LocaleId) => {
+      const imageUrl = variantImages.getVariantImageUrl(locale);
+      if (!imageUrl) return;
+      const link = document.createElement("a");
+      link.href = imageUrl;
+      link.download = `localelens_${locale}.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    },
+    [variantImages]
+  );
+
+  const handleDownloadOriginal = useCallback(() => {
+    if (!queries.baseImageUrl) return;
+    const link = document.createElement("a");
+    link.href = queries.baseImageUrl;
+    link.download = "localelens_original.png";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }, [queries.baseImageUrl]);
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Loading State
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  if (queries.isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center space-y-4">
@@ -219,282 +178,183 @@ export default function ProjectPage() {
     );
   }
 
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Render Helpers
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  const renderSidebar = () => {
+    switch (workflow.currentStep) {
+      case "upload":
+        return (
+          <UploadStepSidebar
+            hasBaseImage={queries.hasBaseImage}
+            isUploading={mutations.isUploading}
+            isDemoLoading={mutations.isDemoLoading}
+            onFileSelect={mutations.handleFileUpload}
+            onLoadDemo={() => mutations.loadDemoBaseImage.mutate({ projectId })}
+            onContinue={workflow.goToMask}
+          />
+        );
+
+      case "mask":
+        return (
+          <MaskStepSidebar
+            activeTool={maskEditor.activeTool}
+            brushSize={maskEditor.brushSize}
+            canUndo={maskEditor.canUndo}
+            canRedo={maskEditor.canRedo}
+            hasChanges={maskEditor.hasChanges}
+            hasMask={queries.hasMask}
+            isDemoProject={queries.isDemoProject}
+            onToolChange={maskEditor.setActiveTool}
+            onBrushSizeChange={maskEditor.setBrushSize}
+            onUndo={maskEditor.undo}
+            onRedo={maskEditor.redo}
+            onEditAll={maskEditor.editAll}
+            onKeepAll={maskEditor.keepAll}
+            onLoadDemo={handleLoadDemoMask}
+            onSave={handleSaveMask}
+            onDeleteMask={handleDeleteMask}
+            onContinue={workflow.goToGenerate}
+          />
+        );
+
+      case "generate":
+        return (
+          <GenerateStepSidebar
+            selectedLocales={selectedLocales}
+            isGenerating={mutations.isGenerating}
+            isDemoMode={isDemoMode}
+            progress={generationProgress}
+            isDemoProject={queries.isDemoProject}
+            onLocaleToggle={handleLocaleToggle}
+            onSelectAll={() => setSelectedLocales([...SUPPORTED_LOCALES])}
+            onClearAll={() => setSelectedLocales([])}
+            onGenerate={handleGenerate}
+            onDemoMode={handleDemoMode}
+          />
+        );
+
+      case "results":
+        return (
+          <ResultsStepSidebar
+            variants={queries.variants}
+            activeVariant={results.activeVariant}
+            showOverlay={results.showOverlay}
+            isExporting={mutations.isExporting}
+            isRegenerating={mutations.regenerateVariant.isPending ? "loading" : null}
+            onVariantSelect={results.selectVariant}
+            onToggleOverlay={results.toggleOverlay}
+            onDownloadVariant={handleDownloadVariant}
+            onDownloadOriginal={handleDownloadOriginal}
+            onRegenerate={(locale) => mutations.regenerateVariant.mutate({ projectId, locale })}
+            onExportZip={() => mutations.exportZip.mutate({ projectId })}
+            onExportMontage={() => mutations.generateMontage.mutate({ projectId })}
+          />
+        );
+    }
+  };
+
+  const renderCanvas = () => {
+    switch (workflow.currentStep) {
+      case "upload":
+        return (
+          <UploadStepCanvas
+            hasBaseImage={queries.hasBaseImage}
+            baseImageUrl={queries.baseImageUrl}
+            canvasWidth={CANVAS_WIDTH}
+            canvasHeight={CANVAS_HEIGHT}
+          />
+        );
+
+      case "mask":
+        return (
+          <MaskStepCanvas
+            canvasRef={maskEditor.canvasRef}
+            baseImageUrl={queries.baseImageUrl}
+            maskUrl={queries.maskUrl}
+            tool={maskEditor.activeTool}
+            brushSize={maskEditor.brushSize}
+            width={CANVAS_WIDTH}
+            height={CANVAS_HEIGHT}
+            onStateChange={maskEditor.handleStateChange}
+          />
+        );
+
+      case "generate":
+        return (
+          <GenerateStepCanvas
+            baseImageUrl={queries.baseImageUrl}
+            maskUrl={queries.maskUrl}
+            selectedLocales={selectedLocales}
+            canvasWidth={CANVAS_WIDTH}
+            canvasHeight={CANVAS_HEIGHT}
+          />
+        );
+
+      case "results":
+        return (
+          <ResultsStepCanvas
+            baseImageUrl={queries.baseImageUrl}
+            activeVariant={results.activeVariant}
+            showOverlay={results.showOverlay}
+            getVariantImageUrl={variantImages.getVariantImageUrl}
+            getOverlayImageUrl={variantImages.getOverlayImageUrl}
+            canvasWidth={CANVAS_WIDTH}
+            canvasHeight={CANVAS_HEIGHT}
+          />
+        );
+    }
+  };
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Main Render
+  // ─────────────────────────────────────────────────────────────────────────────
+
   return (
-    <main className="min-h-screen">
+    <div className="h-screen flex flex-col bg-background">
       {/* Header */}
-      <header className="sticky top-0 z-50 border-b border-border/40 bg-background/80 backdrop-blur-sm">
-        <div className="container flex h-14 items-center justify-between px-4">
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => router.push("/")}
-              className="hover:opacity-80 transition"
-            >
-              <Logo size="md" />
-            </button>
-            <Separator orientation="vertical" className="h-5" />
-            <span className="text-sm text-muted-foreground truncate max-w-50">
-              {project?.name}
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            {hasBaseImage && (
-              <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                <Image className="h-3 w-3" />
-                <span className="hidden sm:inline">Base</span>
-              </div>
-            )}
-            {hasMask && (
-              <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                <PaintBucket className="h-3 w-3" />
-                <span className="hidden sm:inline">Mask</span>
-              </div>
-            )}
-            {variants.length > 0 && (
-              <Badge variant="default" className="text-xs h-5">
-                {variants.length} variant{variants.length !== 1 && "s"}
-              </Badge>
-            )}
-          </div>
-        </div>
+      <header className="shrink-0 h-14 border-b border-border/40 bg-background/80 backdrop-blur-sm flex items-center px-4 gap-4">
+        <button onClick={() => router.push("/")} className="hover:opacity-80 transition">
+          <Logo size="sm" />
+        </button>
+        <Separator orientation="vertical" className="h-5" />
+        <span className="text-sm text-muted-foreground truncate max-w-40">
+          {queries.project?.name}
+        </span>
+
+        <div className="flex-1" />
+
+        <StepProgress
+          currentStep={workflow.currentStep}
+          completedSteps={workflow.completedSteps}
+          disabledSteps={workflow.disabledSteps}
+          onStepClick={workflow.setCurrentStep}
+        />
+
+        <div className="flex-1" />
+
+        {isDemoMode && queries.variants.some((v) => v.modelUsed === "demo-mode") && (
+          <Badge variant="outline" className="border-amber-500 text-amber-500">
+            Demo Mode
+          </Badge>
+        )}
       </header>
 
       {/* Main Content */}
-      <div className="container px-4 py-6">
-        <Tabs
-          value={activeTab}
-          onValueChange={(v) => setActiveTab(v as WorkflowTab)}
-        >
-          <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="upload">1. Upload</TabsTrigger>
-            <TabsTrigger value="mask" disabled={!hasBaseImage}>
-              2. Mask
-            </TabsTrigger>
-            <TabsTrigger value="generate" disabled={!hasBaseImage || !hasMask}>
-              3. Generate
-            </TabsTrigger>
-            <TabsTrigger value="results" disabled={variants.length === 0}>
-              4. Results
-            </TabsTrigger>
-          </TabsList>
+      <div className="flex-1 flex overflow-hidden">
+        {/* Sidebar */}
+        <aside className="w-72 shrink-0 border-r border-border bg-background">
+          <ScrollArea className="h-full">
+            <div className="p-4">{renderSidebar()}</div>
+          </ScrollArea>
+        </aside>
 
-          {/* Upload Tab */}
-          <TabsContent value="upload" className="mt-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Upload Base Image</CardTitle>
-                <CardDescription>
-                  Upload the marketing visual you want to localize, or use the
-                  demo asset.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="flex flex-col items-center gap-4">
-                  {baseImageUrl ? (
-                    <div className="relative aspect-9/16 max-w-md w-full overflow-hidden rounded-lg border border-border">
-                      <img
-                        src={baseImageUrl}
-                        alt="Base image"
-                        className="h-full w-full object-contain"
-                      />
-                    </div>
-                  ) : (
-                    <div className="w-full max-w-md aspect-9/16 border-2 border-dashed border-border rounded-lg flex items-center justify-center">
-                      <div className="text-center space-y-2">
-                        <p className="text-muted-foreground">
-                          No image uploaded
-                        </p>
-                        <p className="text-sm text-muted-foreground">
-                          Supports PNG, JPG, WebP
-                        </p>
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="flex gap-2">
-                    <label className="cursor-pointer">
-                      <input
-                        type="file"
-                        accept="image/png,image/jpeg,image/webp"
-                        onChange={handleFileUpload}
-                        className="hidden"
-                      />
-                      <Button
-                        variant="default"
-                        className="pointer-events-none"
-                        disabled={uploadBaseImage.isPending}
-                      >
-                        {uploadBaseImage.isPending
-                          ? "Uploading..."
-                          : hasBaseImage
-                            ? "Replace Image"
-                            : "Upload Image"}
-                      </Button>
-                    </label>
-                    <Button
-                      variant="outline"
-                      onClick={() => loadDemoBaseImage.mutate({ projectId })}
-                      disabled={loadDemoBaseImage.isPending}
-                    >
-                      {loadDemoBaseImage.isPending
-                        ? "Loading..."
-                        : "Load Demo Asset"}
-                    </Button>
-                  </div>
-                </div>
-
-                {hasBaseImage && (
-                  <div className="flex justify-end">
-                    <Button onClick={() => setActiveTab("mask")}>
-                      Continue to Mask Editor →
-                    </Button>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* Mask Tab */}
-          <TabsContent value="mask" className="mt-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Create Mask</CardTitle>
-                <CardDescription>
-                  Paint the regions you want to replace with localized text.
-                  Transparent areas will be edited.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <MaskCanvas
-                  baseImageUrl={baseImageUrl}
-                  existingMaskUrl={maskUrl}
-                  onSave={handleSaveMask}
-                  onLoadDemoMask={() => loadDemoMask.mutate({ projectId })}
-                  width={540}
-                  height={960}
-                />
-
-                {hasMask && (
-                  <div className="flex justify-end mt-4">
-                    <Button onClick={() => setActiveTab("generate")}>
-                      Continue to Generation →
-                    </Button>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* Generate Tab */}
-          <TabsContent value="generate" className="mt-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Generate Variants</CardTitle>
-                <CardDescription>
-                  Select target locales and generate localized variants using AI
-                  image editing.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <LocaleSelector
-                  selectedLocales={selectedLocales}
-                  onSelectionChange={setSelectedLocales}
-                  disabled={isGenerating}
-                />
-
-                <Separator />
-
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-medium">Ready to Generate</p>
-                      <p className="text-sm text-muted-foreground">
-                        {selectedLocales.length} locale(s) selected
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="lg"
-                        onClick={handleDemoMode}
-                        disabled={
-                          isGenerating ||
-                          selectedLocales.length === 0 ||
-                          !hasBaseImage ||
-                          !hasMask
-                        }
-                      >
-                        Demo Mode
-                      </Button>
-                      <Button
-                        size="lg"
-                        onClick={handleGenerate}
-                        disabled={
-                          isGenerating ||
-                          selectedLocales.length === 0 ||
-                          !hasBaseImage ||
-                          !hasMask
-                        }
-                      >
-                        {isGenerating
-                          ? "Generating..."
-                          : `Generate ${selectedLocales.length} Variant(s)`}
-                      </Button>
-                    </div>
-                  </div>
-
-                  {isGenerating && (
-                    <div className="space-y-2">
-                      <Progress value={generationProgress} />
-                      <p className="text-sm text-muted-foreground text-center">
-                        {isDemoMode
-                          ? "Loading demo outputs..."
-                          : "Generating variants... This may take a minute."}
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* Results Tab */}
-          <TabsContent value="results" className="mt-6 space-y-4">
-            {/* Demo Mode Banner */}
-            {isDemoMode && variants.some((v) => v.modelUsed === "demo-mode") && (
-              <Card className="border-amber-500/50 bg-amber-500/10">
-                <CardContent className="py-3">
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline" className="border-amber-500 text-amber-500">
-                      Demo Mode
-                    </Badge>
-                    <span className="text-sm text-amber-500">
-                      API unavailable — showing pre-generated outputs. Drift analysis and exports still work.
-                    </span>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Generated Variants</CardTitle>
-                <CardDescription>
-                  View and compare your localized variants. Download individual
-                  images or export all.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <VariantViewer
-                  projectId={projectId}
-                  baseImageUrl={baseImageUrl}
-                  variants={variants}
-                  onVariantsChange={() => void refetchProject()}
-                />
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
+        {/* Canvas Area */}
+        <main className="flex-1 bg-muted/10 overflow-auto">
+          {renderCanvas()}
+        </main>
       </div>
-    </main>
+    </div>
   );
 }
