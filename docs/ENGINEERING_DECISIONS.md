@@ -240,12 +240,14 @@ STRICT RULES:
 **Decision:** Pixel-by-pixel RGB comparison with Euclidean distance
 
 **Implementation:**
+
 - Compare each pixel outside mask between original and variant
 - Use Euclidean distance in RGB space: `sqrt((r1-r2)² + (g1-g2)² + (b1-b2)²)`
 - Threshold: distance > 30 = "changed pixel"
 - Score = (changed pixels outside mask) / (total pixels outside mask) * 100
 
 **Thresholds:**
+
 - PASS: ≤ 2.0%
 - WARN: 2.0% – 5.0%
 - FAIL: > 5.0%
@@ -259,7 +261,8 @@ STRICT RULES:
 **Decision:** 2×2 grid with labels, dark theme
 
 **Layout:**
-```
+
+```text
 ┌──────────────┬──────────────┐
 │   Original   │   Spanish    │
 │   (English)  │   (es-MX)    │
@@ -278,7 +281,8 @@ STRICT RULES:
 **Decision:** Flat structure with clear naming
 
 **Structure:**
-```
+
+```text
 localelens_{projectId}_variants.zip
 ├── base.png
 ├── mask.png
@@ -305,6 +309,7 @@ localelens_{projectId}_variants.zip
 **Date:** 2025-12-17
 
 **Rationale:**
+
 - Original `page.tsx` was 600+ lines doing everything (state, queries, mutations, rendering)
 - Router `project.ts` was 430+ lines with orchestration logic mixed into handlers
 - Violated Single Responsibility Principle throughout
@@ -340,6 +345,7 @@ src/
 ```
 
 **Metrics:**
+
 - `page.tsx`: 600 → 360 lines (-40%)
 - `project.ts` router: 430 → 267 lines (-38%)
 - 30 new files created with clear single responsibilities
@@ -355,6 +361,7 @@ src/
 **Previous Approach:** Attempted resizable panels, but caused UX issues (toolbar overlap)
 
 **Final Approach:**
+
 ```text
 ┌────────────────────────────────────────────────────────┐
 │  Header: Logo | Project Name | Step Progress | Badge  │
@@ -378,12 +385,14 @@ src/
 **Decision:** Four-step workflow with progress indicator
 
 **Steps:**
+
 1. **Upload** — Upload base image or load demo
 2. **Mask** — Paint editable regions with tools
 3. **Generate** — Select locales and generate variants
 4. **Results** — Compare variants, view drift, export
 
 **Navigation Rules:**
+
 - Can only advance when current step requirements are met
 - Can always go back to completed steps
 - Progress indicator shows completed/active/disabled states
@@ -395,6 +404,7 @@ src/
 **Decision:** Demo-specific buttons only show for demo projects
 
 **Implementation:**
+
 ```typescript
 const isDemoProject = project?.name?.toLowerCase().includes("demo") ?? false;
 
