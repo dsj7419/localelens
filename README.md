@@ -39,7 +39,7 @@ Built for the [OpenAI Image Generation API Contest](https://openai.com/).
 
 ## How It Works
 
-```
+```text
 ┌─────────────┐      ┌─────────────┐      ┌─────────────┐      ┌─────────────┐
 │  1. UPLOAD  │ ──▶  │  2. MASK    │ ──▶  │  3. GENERATE│ ──▶  │  4. INSPECT │
 │             │      │             │      │             │      │             │
@@ -81,6 +81,7 @@ pnpm dev
 ```
 
 Then:
+
 1. Click **"Try Demo Project"**
 2. Navigate to **Generate** tab
 3. Click **"Demo Mode"** instead of "Generate Variants"
@@ -136,7 +137,7 @@ DATABASE_URL=file:./db.sqlite       # Local SQLite (default)
 
 ## Project Structure
 
-```
+```text
 localelens/
 ├── src/
 │   ├── app/                    # Next.js App Router pages
@@ -222,6 +223,4 @@ MIT
 
 ---
 
-<p align="center">
-  <strong>LocaleLens</strong> — OpenAI Image Generation API Contest Entry
-</p>
+**LocaleLens** — OpenAI Image Generation API Contest Entry
