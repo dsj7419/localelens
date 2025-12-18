@@ -181,6 +181,8 @@ export class OpenAIImageService implements IImageGenerator, IImageEditor {
         type: "image/png",
       });
 
+      // Note: images.edit API does NOT support response_format parameter
+      // It returns URLs by default, which we then fetch
       const response = await this.client.images.edit({
         model,
         image: imageFile,
@@ -188,7 +190,6 @@ export class OpenAIImageService implements IImageGenerator, IImageEditor {
         prompt,
         n: 1,
         size,
-        response_format: "b64_json",
       });
 
       const result = await this.extractImageFromResponse(response, model);
