@@ -56,3 +56,6 @@ db.sqlite
 
 # Repomix
 repomix*
+
+# Claude Code local settings (machine-specific)
+.claude/settings.local.json
