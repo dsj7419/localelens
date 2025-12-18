@@ -8,7 +8,6 @@
 ## Current Status
 
 | Sprint | Status | Date |
-|--------|--------|------|
 | Sprint 0 | **COMPLETE** | 2025-12-17 |
 | Sprint 1 | **COMPLETE** | 2025-12-17 |
 | Sprint 2 | **COMPLETE** | 2025-12-17 |
@@ -18,6 +17,7 @@
 | Sprint 6 | **CRITICAL - IN PROGRESS** | 2025-12-18 |
 
 **Current State:**
+
 - Core functionality complete and working
 - SOLID/SRP architecture refactoring complete
 - OpenAI Image Edit API integration verified working (gpt-image-1.5)
@@ -533,12 +533,14 @@ Fix the critical drift issue (currently 14.5% - FAILING) by optimizing OpenAI Im
 From the official API documentation:
 
 **For `images.edit` endpoint:**
+
 - `input_fidelity`: "high" | "low" — Controls style/feature matching (USE HIGH!)
 - `quality`: "high" | "medium" | "low" — Image quality level
 - `size`: "1024x1024" | "1536x1024" | "1024x1536" | "auto"
 - `background`: "transparent" | "opaque" | "auto"
 
 **Mask format:**
+
 - Transparent areas (alpha=0) = regions to edit
 - Opaque areas (alpha=255) = regions to preserve
 
