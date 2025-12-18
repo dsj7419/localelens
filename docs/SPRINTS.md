@@ -11,10 +11,10 @@
 |--------|--------|------|
 | Sprint 0 | **COMPLETE** | 2025-12-17 |
 | Sprint 1 | **COMPLETE** | 2025-12-17 |
-| Sprint 2 | PENDING | - |
-| Sprint 3 | PENDING | - |
+| Sprint 2 | **COMPLETE** | 2025-12-17 |
+| Sprint 3 | **COMPLETE** | 2025-12-17 |
 
-**Note:** Sprint 1 code complete. End-to-end API testing blocked pending OpenAI organization verification (external dependency).
+**Note:** All sprints code complete. Demo Mode allows full UX testing without API access. Pending: generate real variant outputs once OpenAI organization is verified.
 
 ---
 
@@ -200,6 +200,8 @@ Enable the primary workflow: upload base image → create mask → generate loca
 
 ## 4) Sprint 2 — Differentiators: Drift Inspector + RTL Wow + Constraint Plan
 
+> **STATUS: COMPLETE** (2025-12-17)
+
 ### 4.1 Sprint goal
 
 Turn LocaleLens from “it works” to “it wins” by adding professional-grade QA signals and robust text constraints.
@@ -267,6 +269,8 @@ Turn LocaleLens from “it works” to “it wins” by adding professional-grad
 ---
 
 ## 5) Sprint 3 — Submission Polish: README, Demo Script, and Gallery
+
+> **STATUS: COMPLETE** (2025-12-17)
 
 ### 5.1 Sprint goal
 
