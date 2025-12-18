@@ -98,12 +98,10 @@ Demo Mode loads outputs from `docs/demo-assets/expected-outputs/` and runs the c
 ```bash
 # .env
 OPENAI_API_KEY=sk-...               # Required for live generation
-IMAGE_MODEL=gpt-image-1             # Primary model (default)
-IMAGE_MODEL_FALLBACK=dall-e-2       # Fallback if primary fails
+IMAGE_MODEL=gpt-image-1.5           # Primary model (contest target)
+IMAGE_MODEL_FALLBACK=gpt-image-1    # Fallback if primary unavailable
 DATABASE_URL=file:./db.sqlite       # Local SQLite (default)
 ```
-
-> **Note:** Model defaults are configured in `src/env.js`. Adjust based on your API access tier.
 
 ### Supported Locales
 
@@ -171,7 +169,7 @@ localelens/
 | Database | Prisma + SQLite |
 | Styling | Tailwind CSS v4 + shadcn/ui |
 | Image Processing | Sharp |
-| AI | OpenAI Image Generation API |
+| AI | OpenAI gpt-image-1.5 |
 
 ---
 
@@ -180,7 +178,7 @@ localelens/
 - **Local-first:** SQLite database, file-based asset storage. No external services required beyond OpenAI.
 - **Clean Architecture:** Domain layer is framework-agnostic. Repositories use interface segregation.
 - **Thin routers:** tRPC handlers delegate to domain services. Business logic is testable in isolation.
-- **Model fallback:** If `gpt-image-1` fails, automatically retries with `dall-e-2`.
+- **Model fallback:** If `gpt-image-1.5` fails, automatically retries with `gpt-image-1`.
 - **Demo Mode:** Pre-generated outputs enable full UX without API access—critical for contest judging.
 
 See [Engineering Decisions](docs/ENGINEERING_DECISIONS.md) for detailed rationale.
