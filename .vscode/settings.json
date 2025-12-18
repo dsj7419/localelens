@@ -1,0 +1,36 @@
+{
+    "typescript.tsdk": "node_modules/typescript/lib",
+    "typescript.enablePromptUseWorkspaceTsdk": true,
+    "cSpell.words": [
+        "appstore",
+        "BYOK",
+        "Compártelo",
+        "equipo",
+        "horario",
+        "inteligentes",
+        "localelens",
+        "microtext",
+        "PLANEA",
+        "Producto",
+        "PRUÉBALO",
+        "Recordatorios",
+        "Runbook",
+        "SEGUNDOS",
+        "Sugerencias",
+        "vercel",
+        "مجانًا"
+    ],
+    "css.validate": false,
+    "scss.validate": false,
+    "less.validate": false,
+    "files.associations": {
+        "*.css": "tailwindcss"
+    },
+    "tailwindCSS.includeLanguages": {
+        "typescript": "javascript",
+        "typescriptreact": "javascript"
+    },
+    "editor.quickSuggestions": {
+        "strings": true
+    }
+}

@@ -1,29 +1,137 @@
-# Create T3 App
+# LocaleLens
 
-This is a [T3 Stack](https://create.t3.gg/) project bootstrapped with `create-t3-app`.
+> AI-Powered Marketing Localization Tool
 
-## What's next? How do I make an app with this?
+LocaleLens is a local-first workflow tool that takes a base marketing visual, lets you mark text regions with a mask, then generates **layout-safe localized variants** using OpenAI's Image Gen API—while automatically measuring visual drift.
 
-We try to keep this project as simple as possible, so you can start with just the scaffolding we set up for you, and add additional things later when they become necessary.
+Built for the OpenAI Image Gen API Contest
 
-If you are not familiar with the different technologies used in this project, please refer to the respective docs. If you still are in the wind, please join our [Discord](https://t3.gg/discord) and ask for help.
+---
 
-- [Next.js](https://nextjs.org)
-- [NextAuth.js](https://next-auth.js.org)
-- [Prisma](https://prisma.io)
-- [Drizzle](https://orm.drizzle.team)
-- [Tailwind CSS](https://tailwindcss.com)
-- [tRPC](https://trpc.io)
+## Current Status
 
-## Learn More
+| Sprint | Status | Description |
+|--------|--------|-------------|
+| Sprint 0 | Complete | Foundation + OpenAI service |
+| Sprint 1 | Complete | Mask editor + variant generation |
+| Sprint 2 | Pending | Drift Inspector + RTL polish |
+| Sprint 3 | Pending | README gallery + submission polish |
 
-To learn more about the [T3 Stack](https://create.t3.gg/), take a look at the following resources:
+---
 
-- [Documentation](https://create.t3.gg/)
-- [Learn the T3 Stack](https://create.t3.gg/en/faq#what-learning-resources-are-currently-available) — Check out these awesome tutorials
+## Quick Start
 
-You can check out the [create-t3-app GitHub repository](https://github.com/t3-oss/create-t3-app) — your feedback and contributions are welcome!
+```bash
+# Clone and install
+git clone <repo-url>
+cd localelens
+pnpm install
 
-## How do I deploy this?
+# Configure environment
+cp .env.example .env
+# Add your OPENAI_API_KEY to .env
 
-Follow our deployment guides for [Vercel](https://create.t3.gg/en/deployment/vercel), [Netlify](https://create.t3.gg/en/deployment/netlify) and [Docker](https://create.t3.gg/en/deployment/docker) for more information.
+# Initialize database
+pnpm db:push
+
+# Start development server
+pnpm dev
+```
+
+Open <http://localhost:3000>
+
+---
+
+## Demo Flow (< 2 minutes)
+
+1. Click **"Load Demo Project"** on homepage
+2. Go to **"3. Generate"** tab
+3. Select locales: es-MX, fr-CA, ar
+4. Click **"Generate Variants"**
+5. View results in **"4. Results"** tab
+
+---
+
+## Features
+
+### Sprint 1 (Current)
+
+- Project create/upload workflow
+- Canvas-based mask editor (brush, eraser, rectangle tools)
+- Locale selection: Spanish (Mexico), French (Canada), Arabic (RTL)
+- Variant generation with model fallback (gpt-image-1.5 → gpt-image-1)
+- Side-by-side comparison viewer
+- Per-locale download
+
+### Sprint 2 (Upcoming)
+
+- Drift Inspector with pixel-level diff
+- RTL text rendering validation
+- Export ZIP + montage generation
+- Regeneration controls
+
+---
+
+## Tech Stack
+
+- **Framework:** Next.js 15 (App Router) + TypeScript
+- **API:** tRPC for type-safe server calls
+- **Database:** Prisma + SQLite (local-first)
+- **Styling:** Tailwind CSS v4 + shadcn/ui
+- **AI:** OpenAI Image Gen API (gpt-image-1.5)
+
+---
+
+## Architecture
+
+```text
+src/server/
+├── domain/                    # Clean architecture
+│   ├── entities/              # Type definitions
+│   ├── repositories/          # Interfaces (ISP)
+│   ├── services/              # Domain services
+│   └── value-objects/         # Locale, Drift
+├── infrastructure/            # Prisma implementations
+└── services/                  # OpenAI, FileStore
+```
+
+---
+
+## Environment Variables
+
+```bash
+# Required
+OPENAI_API_KEY=sk-...
+
+# Optional (defaults shown)
+IMAGE_MODEL=gpt-image-1.5
+IMAGE_MODEL_FALLBACK=gpt-image-1
+DATABASE_URL=file:./db.sqlite
+```
+
+---
+
+## Documentation
+
+- [Contest Spec](docs/CONTEST_SPEC.md) - Project requirements
+- [Sprint Plan](docs/SPRINTS.md) - Execution roadmap
+- [Demo Script](docs/DEMO_SCRIPT.md) - Reproducible demo steps
+- [Engineering Decisions](docs/ENGINEERING_DECISIONS.md) - Technical choices
+
+---
+
+## Security
+
+- API keys are **server-side only** (never in client bundle)
+- No credentials committed to repo
+- Local-first: all data stays on your machine
+
+---
+
+## License
+
+MIT
+
+---
+
+LocaleLens - Built for the OpenAI Image Gen API Contest

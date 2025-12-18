@@ -11,11 +11,61 @@ datasource db {
     url      = env("DATABASE_URL")
 }
 
-model Post {
-    id        Int      @id @default(autoincrement())
-    name      String
-    createdAt DateTime @default(now())
-    updatedAt DateTime @updatedAt
+// ============================================
+// LocaleLens Data Models
+// ============================================
+
+/// A localization project containing a base image and its variants
+model Project {
+    id            String    @id @default(cuid())
+    name          String
+    baseImagePath String?   // Path to base image in .local-data
+    createdAt     DateTime  @default(now())
+    updatedAt     DateTime  @updatedAt
+
+    // Relations
+    mask     Mask?
+    variants Variant[]
 
     @@index([name])
+    @@index([createdAt])
+}
+
+/// A mask defining editable regions for a project
+model Mask {
+    id            String   @id @default(cuid())
+    projectId     String   @unique
+    maskImagePath String   // Path to mask image in .local-data
+    createdAt     DateTime @default(now())
+
+    // Relations
+    project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+/// A generated variant for a specific locale
+model Variant {
+    id              String      @id @default(cuid())
+    projectId       String
+    locale          String      // e.g., "es-MX", "fr-CA", "ar"
+    prompt          String      // The prompt used for generation
+    outputImagePath String      // Path to output image in .local-data
+    driftScore      Float?      // Percentage of pixels changed outside mask
+    driftStatus     DriftStatus @default(PENDING)
+    modelUsed       String?     // The model that generated this variant
+    createdAt       DateTime    @default(now())
+
+    // Relations
+    project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+    @@unique([projectId, locale])
+    @@index([projectId])
+    @@index([locale])
+}
+
+/// Status of drift analysis for a variant
+enum DriftStatus {
+    PENDING // Not yet analyzed
+    PASS    // Drift <= 2%
+    WARN    // Drift 2-5%
+    FAIL    // Drift > 5%
 }

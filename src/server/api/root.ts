@@ -1,13 +1,20 @@
-import { postRouter } from "~/server/api/routers/post";
+import { imageRouter } from "~/server/api/routers/image";
+import { projectRouter } from "~/server/api/routers/project";
+import { variantRouter } from "~/server/api/routers/variant";
 import { createCallerFactory, createTRPCRouter } from "~/server/api/trpc";
 
 /**
- * This is the primary router for your server.
+ * Primary tRPC router for LocaleLens
  *
- * All routers added in /api/routers should be manually added here.
+ * Routers:
+ * - image: Test generation and utilities
+ * - project: Project CRUD and demo asset loading
+ * - variant: Variant generation pipeline
  */
 export const appRouter = createTRPCRouter({
-  post: postRouter,
+  image: imageRouter,
+  project: projectRouter,
+  variant: variantRouter,
 });
 
 // export type definition of API
@@ -15,9 +22,5 @@ export type AppRouter = typeof appRouter;
 
 /**
  * Create a server-side caller for the tRPC API.
- * @example
- * const trpc = createCaller(createContext);
- * const res = await trpc.post.all();
- *       ^? Post[]
  */
 export const createCaller = createCallerFactory(appRouter);

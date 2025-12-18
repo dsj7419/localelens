@@ -7,10 +7,15 @@ export const env = createEnv({
    * isn't built with invalid env vars.
    */
   server: {
-    DATABASE_URL: z.string().url(),
+    DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
     NODE_ENV: z
       .enum(["development", "test", "production"])
       .default("development"),
+
+    // OpenAI API Configuration (server-only for security)
+    OPENAI_API_KEY: z.string().min(1, "OPENAI_API_KEY is required"),
+    IMAGE_MODEL: z.string().default("gpt-image-1.5"),
+    IMAGE_MODEL_FALLBACK: z.string().default("gpt-image-1"),
   },
 
   /**
@@ -29,7 +34,9 @@ export const env = createEnv({
   runtimeEnv: {
     DATABASE_URL: process.env.DATABASE_URL,
     NODE_ENV: process.env.NODE_ENV,
-    // NEXT_PUBLIC_CLIENTVAR: process.env.NEXT_PUBLIC_CLIENTVAR,
+    OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+    IMAGE_MODEL: process.env.IMAGE_MODEL,
+    IMAGE_MODEL_FALLBACK: process.env.IMAGE_MODEL_FALLBACK,
   },
   /**
    * Run `build` or `dev` with `SKIP_ENV_VALIDATION` to skip env validation. This is especially

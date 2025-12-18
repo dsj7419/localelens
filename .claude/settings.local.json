@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pnpm add:*)",
+      "Bash(pnpm dlx shadcn@latest add:*)",
+      "Bash(pnpm db:push:*)",
+      "Bash(pnpm typecheck:*)",
+      "Bash(pnpm dev)",
+      "Bash(pnpm approve-builds:*)",
+      "Bash(npx prisma generate:*)",
+      "WebFetch(domain:localhost)",
+      "Bash(curl:*)",
+      "Bash(npx tsc --version)",
+      "Bash(tree:*)",
+      "Bash(taskkill /F /FI \"WINDOWTITLE eq *node*\")",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(taskkill:*)",
+      "Bash(powershell -Command:*)",
+      "Bash(dir:*)",
+      "Bash(del \"F:\\\\Projects\\\\OpenAIContests\\\\LocaleLens\\\\localelens\\\\pnpm-workspace.yaml\")",
+      "Bash(del \"F:\\\\Projects\\\\OpenAIContests\\\\LocaleLens\\\\localelens\\\\nul\")",
+      "Bash(git add:*)"
+    ]
+  }
+}
