@@ -10,7 +10,6 @@ export const metadata: Metadata = {
   title: "LocaleLens - AI-Powered Marketing Localization",
   description:
     "Local-first tool for localizing marketing visuals using AI image generation. Replace text in any language while preserving design integrity.",
-  icons: [{ rel: "icon", url: "/favicon.ico" }],
 };
 
 const geist = Geist({
