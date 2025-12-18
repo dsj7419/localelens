@@ -35,8 +35,8 @@ import {
   PaintBucket,
   CheckCircle2,
   ArrowRight,
-  Globe,
 } from "lucide-react";
+import { Logo } from "~/components/Logo";
 
 export default function Home() {
   const router = useRouter();
@@ -95,12 +95,7 @@ export default function Home() {
       {/* Header */}
       <header className="sticky top-0 z-50 border-b border-border/40 bg-background/80 backdrop-blur-sm">
         <div className="container flex h-14 items-center justify-between px-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-linear-to-br from-primary to-primary/80">
-              <Globe className="h-4 w-4 text-primary-foreground" />
-            </div>
-            <span className="text-lg font-semibold tracking-tight">LocaleLens</span>
-          </div>
+          <Logo size="md" />
           <Badge variant="outline" className="text-xs font-normal">
             OpenAI Contest Entry
           </Badge>

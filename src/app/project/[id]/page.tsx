@@ -20,7 +20,8 @@ import { MaskCanvas } from "~/components/project/MaskCanvas";
 import { LocaleSelector } from "~/components/project/LocaleSelector";
 import { VariantViewer } from "~/components/project/VariantViewer";
 import { SUPPORTED_LOCALES, type LocaleId } from "~/server/domain/value-objects/locale";
-import { Globe, Image, PaintBucket, Sparkles } from "lucide-react";
+import { Image, PaintBucket, Sparkles } from "lucide-react";
+import { Logo } from "~/components/Logo";
 
 type WorkflowTab = "upload" | "mask" | "generate" | "results";
 
@@ -226,15 +227,12 @@ export default function ProjectPage() {
           <div className="flex items-center gap-4">
             <button
               onClick={() => router.push("/")}
-              className="flex items-center gap-3 hover:opacity-80 transition"
+              className="hover:opacity-80 transition"
             >
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-linear-to-br from-primary to-primary/80">
-                <Globe className="h-4 w-4 text-primary-foreground" />
-              </div>
-              <span className="text-lg font-semibold tracking-tight">LocaleLens</span>
+              <Logo size="md" />
             </button>
             <Separator orientation="vertical" className="h-5" />
-            <span className="text-sm text-muted-foreground truncate max-w-50">
+            <span className="text-sm text-muted-foreground truncate max-w-[200px]">
               {project?.name}
             </span>
           </div>
