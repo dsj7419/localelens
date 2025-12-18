@@ -21,7 +21,7 @@ Before doing ANYTHING else, you MUST use ultrathink mode and thoroughly research
 
 Read these files completely to understand context:
 
-```
+```text
 docs/CONTEST_SPEC.md       — Contest requirements, judging criteria, win strategy
 docs/SPRINTS.md            — Sprint history, current status, Sprint 6 scope (READ SECTION 8 CAREFULLY!)
 docs/ENGINEERING_DECISIONS.md — Architectural decisions ED-001 through ED-019
@@ -33,7 +33,7 @@ README.md                  — Public-facing documentation
 
 Read these files to understand how we currently call the OpenAI API:
 
-```
+```text
 src/server/services/openaiImage.ts              — THE MAIN FILE TO MODIFY (API calls)
 src/server/domain/services/localePlan.service.ts — Prompt templates (may need hardening)
 src/server/domain/services/variantGeneration.service.ts — Generation pipeline orchestration
@@ -44,7 +44,7 @@ src/server/services/fileStore.ts                — Image file handling
 
 ### Step 3: Understand the Domain Layer
 
-```
+```text
 src/server/domain/value-objects/locale.ts       — Locale definitions (es-MX, fr-CA, ar)
 src/server/domain/value-objects/drift.ts        — Drift score thresholds
 src/server/api/routers/variant.ts               — Variant generation router
@@ -52,7 +52,7 @@ src/server/api/routers/variant.ts               — Variant generation router
 
 ### Step 4: Understand the Mask System
 
-```
+```text
 src/components/project/MaskCanvas.tsx           — How masks are created
 docs/demo-assets/mask_text_regions_1080x1920.png — The demo mask file
 ```
@@ -66,6 +66,7 @@ docs/demo-assets/mask_text_regions_1080x1920.png — The demo mask file
 Our "Drift Inspector" measures how much the AI changed pixels OUTSIDE the masked region. The goal is near-zero drift outside the mask — we only want text replacement inside the mask.
 
 **What's happening:**
+
 1. Generated images are NOT preserving areas outside the mask
 2. Images appear **vertically compressed** (top-to-bottom distortion)
 3. **UI elements like buttons are being modified** when they shouldn't be
@@ -73,6 +74,7 @@ Our "Drift Inspector" measures how much the AI changed pixels OUTSIDE the masked
 5. Overall image fidelity is poor — it looks "different" from the original
 
 **Root Causes (Hypothesis):**
+
 1. **API parameters not optimized** — We're not using `input_fidelity`, `quality`, etc.
 2. **Prompts not strict enough** — Not explicitly telling API to preserve non-masked areas
 3. **Possible mask format issue** — OpenAI expects: transparent=edit, opaque=preserve
@@ -86,10 +88,10 @@ Our "Drift Inspector" measures how much the AI changed pixels OUTSIDE the masked
 
 ### Endpoint: `POST https://api.openai.com/v1/images/edits`
 
-### Critical Parameters for Our Use Case:
+### Critical Parameters for Our Use Case
 
 | Parameter | Type | Description | **RECOMMENDED VALUE** |
-|-----------|------|-------------|----------------------|
+| --------- | ---- | ----------- | ---------------------- |
 | `image` | file/array | Source image(s) to edit | Our base image |
 | `mask` | file | Transparent areas = edit, opaque = preserve | Our mask |
 | `prompt` | string | What to generate (max 32000 chars for GPT models) | See below |
@@ -109,7 +111,7 @@ This is EXACTLY what we need! Setting `input_fidelity: "high"` should help the m
 
 **NOTE:** Documentation says it's for `gpt-image-1` only, but test with `gpt-image-1.5` as well.
 
-### Mask Format Requirements:
+### Mask Format Requirements
 
 - **Transparent areas (alpha = 0):** Regions the AI should EDIT
 - **Opaque areas (alpha = 255):** Regions the AI should PRESERVE
@@ -141,6 +143,7 @@ async editImage(options: EditImageOptions): Promise<ImageServiceResult> {
 ```
 
 **PROBLEMS:**
+
 - No `input_fidelity` parameter
 - No `quality` parameter
 - No `background` parameter
@@ -149,6 +152,7 @@ async editImage(options: EditImageOptions): Promise<ImageServiceResult> {
 ### File: `src/server/domain/services/localePlan.service.ts`
 
 Current prompts may not be strict enough. Review the `buildPrompt()` method and ensure prompts include:
+
 - Explicit instruction to ONLY modify masked regions
 - Instruction to preserve EXACT pixels outside mask
 - Instruction to maintain image dimensions
@@ -183,7 +187,7 @@ const response = await this.client.images.edit({
 
 In `src/server/domain/services/localePlan.service.ts`, strengthen the prompts:
 
-```
+```text
 CRITICAL CONSTRAINTS:
 - ONLY modify the text within the transparent/masked regions
 - DO NOT modify ANY pixels outside the masked area
@@ -195,6 +199,7 @@ CRITICAL CONSTRAINTS:
 ### Priority 3: Verify Mask Format
 
 Check that our mask has:
+
 - **Transparent (alpha=0)** where we want text REPLACED
 - **Opaque (alpha=255)** where we want image PRESERVED
 
@@ -203,6 +208,7 @@ If inverted, fix in `fileStore.ts` or mask generation.
 ### Priority 4: Check Image Size Handling
 
 Verify the `size` parameter matches our input image (1080x1920 portrait).
+
 - Closest API size: `1024x1536` (portrait)
 - Check if this is causing distortion
 - Consider using `size: "auto"` if available for edits
@@ -210,6 +216,7 @@ Verify the `size` parameter matches our input image (1080x1920 portrait).
 ### Priority 5: Debug Drift Calculation
 
 Review `src/server/services/diffService.ts`:
+
 - Is the comparison fair?
 - Is the threshold appropriate?
 - Are we comparing at the right resolution?
@@ -242,7 +249,7 @@ pnpm db:push      # Sync Prisma schema (if needed)
 ## TESTING THE FIX
 
 1. Start dev server: `pnpm dev`
-2. Go to http://localhost:3000
+2. Go to <http://localhost:3000>
 3. Click "Load Demo Project" (or create new project with demo assets)
 4. Go to Generate step
 5. Click "Demo Mode" or "Generate" (if you have API key)
@@ -254,7 +261,7 @@ pnpm db:push      # Sync Prisma schema (if needed)
 ## FILES SUMMARY (Priority Order)
 
 | File | Purpose | Action |
-|------|---------|--------|
+| ---- | ------- | ------ |
 | `src/server/services/openaiImage.ts` | API calls | **ADD PARAMETERS** |
 | `src/server/domain/services/localePlan.service.ts` | Prompts | **HARDEN PROMPTS** |
 | `src/server/services/diffService.ts` | Drift calc | Review/debug |
@@ -268,6 +275,7 @@ pnpm db:push      # Sync Prisma schema (if needed)
 ### What is LocaleLens?
 
 A local-first tool that localizes marketing images (App Store screenshots) using OpenAI's Image Edit API. Users:
+
 1. Upload an image
 2. Paint a mask over text regions
 3. Generate localized variants (Spanish, French, Arabic RTL)
