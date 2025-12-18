@@ -3,7 +3,13 @@
 import { Button } from "~/components/ui/button";
 import { Badge } from "~/components/ui/badge";
 import { Separator } from "~/components/ui/separator";
-import { Sparkles, PlayCircle, Check } from "lucide-react";
+import { Sparkles, PlayCircle, Check, Zap, Info } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "~/components/ui/tooltip";
 import {
   SUPPORTED_LOCALES,
   LOCALE_REGISTRY,
@@ -17,6 +23,10 @@ interface GenerateSidebarProps {
   isDemoMode: boolean;
   progress: number;
   isDemoProject?: boolean;
+  /** Enable streaming mode with progressive image preview */
+  streamingEnabled?: boolean;
+  /** Callback when streaming toggle changes */
+  onStreamingChange?: (enabled: boolean) => void;
   onLocaleToggle: (locale: LocaleId) => void;
   onSelectAll: () => void;
   onClearAll: () => void;
@@ -36,6 +46,8 @@ export function GenerateSidebar({
   isGenerating,
   isDemoMode,
   progress,
+  streamingEnabled = false,
+  onStreamingChange,
   onLocaleToggle,
   onSelectAll,
   onClearAll,
@@ -130,6 +142,54 @@ export function GenerateSidebar({
             </p>
           )}
         </div>
+
+        <Separator />
+
+        {/* Streaming Toggle */}
+        {onStreamingChange && (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Zap className="h-4 w-4 text-amber-500" />
+                <span className="text-sm font-medium">Live Preview</span>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger>
+                      <Info className="h-3.5 w-3.5 text-muted-foreground" />
+                    </TooltipTrigger>
+                    <TooltipContent side="right" className="max-w-50">
+                      <p className="text-xs">
+                        Shows progressive image generation in real-time.
+                        Each preview incurs additional API cost.
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+              <button
+                onClick={() => onStreamingChange(!streamingEnabled)}
+                disabled={isGenerating}
+                className={`
+                  relative inline-flex h-5 w-9 items-center rounded-full transition-colors
+                  ${streamingEnabled ? "bg-amber-500" : "bg-muted"}
+                  ${isGenerating ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}
+                `}
+              >
+                <span
+                  className={`
+                    inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform
+                    ${streamingEnabled ? "translate-x-4" : "translate-x-0.5"}
+                  `}
+                />
+              </button>
+            </div>
+            {streamingEnabled && (
+              <p className="text-xs text-muted-foreground">
+                Progressive preview enabled - additional cost per generation
+              </p>
+            )}
+          </div>
+        )}
 
         <Separator />
 

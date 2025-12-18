@@ -419,14 +419,425 @@ onDemoMode={isDemoProject ? handleDemoMode : undefined}
 
 ---
 
-## Pending Decisions (Visual Polish Sprint)
+## Sprint 6 Decisions (gpt-image-1.5 Mastery)
 
-- **ED-020:** Glass morphism styling approach (pending)
-- **ED-021:** Animation and transition system (pending)
-- **ED-022:** Loading states during generation (pending)
-- **ED-023:** Keyboard shortcuts implementation (pending)
-- **ED-024:** Error boundary strategy (pending)
-- **ED-025:** Mobile/responsive breakpoints (pending)
+### ED-020: gpt-image-1.5 as Primary Model (Contest Requirement)
+
+**Decision:** Use gpt-image-1.5 exclusively for the contest submission
+
+**Date:** 2025-12-18
+
+**Rationale:**
+
+- Contest explicitly requires showcasing gpt-image-1.5
+- `input_fidelity` parameter is ONLY available for gpt-image-1, NOT gpt-image-1.5
+- Must rely on other strategies for image preservation:
+  - Prompt engineering (surgical precision)
+  - API parameters (`quality: "high"`, `background: "opaque"`)
+  - Post-processing (pixel-perfect composite mode)
+
+**Impact:** Strategy pivots from API parameter reliance to multi-pronged approach.
+
+---
+
+### ED-021: API Parameter Maximization
+
+**Decision:** Use ALL available gpt-image-1.5 parameters for maximum quality
+
+**Configuration:**
+
+```typescript
+{
+  model: "gpt-image-1.5",
+  size: "auto",           // Let API optimize for input
+  quality: "high",        // Maximum quality output
+  background: "opaque",   // Prevent transparency issues
+  output_format: "png",   // Lossless format
+}
+```
+
+**Rationale:**
+
+- `quality: "high"` — Reduces compression artifacts
+- `background: "opaque"` — Prevents unwanted transparency
+- `output_format: "png"` — Ensures lossless output
+- `size: "auto"` — Lets API choose optimal dimensions
+
+**Impact:** Better baseline quality before any post-processing.
+
+---
+
+### ED-022: Pixel-Perfect Composite Mode
+
+**Decision:** Implement mask-based compositing for guaranteed 0% drift
+
+**Algorithm:**
+
+1. Generate variant using gpt-image-1.5
+2. Resize generated output to match original dimensions
+3. For each pixel:
+   - If mask is opaque (alpha > 127): use ORIGINAL pixel
+   - If mask is transparent (alpha <= 127): use GENERATED pixel
+4. Result: 0% drift outside mask guaranteed
+
+**Implementation:** New `CompositeService` class
+
+**Rationale:**
+
+- Without `input_fidelity`, API cannot guarantee preservation
+- Compositing provides deterministic pixel-perfect results
+- Shows professional production workflow thinking
+- Differentiates us from other contest entries
+
+**Trade-offs:**
+
+- Additional processing time (~50-100ms)
+- Must ensure dimension matching before composite
+
+**Impact:** Guaranteed 0% drift — contest differentiator.
+
+---
+
+### ED-023: Surgical Prompt Engineering
+
+**Decision:** Use extremely precise prompts since `input_fidelity` unavailable
+
+**Template Structure:**
+
+```text
+CRITICAL CONSTRAINTS (VIOLATION = FAILURE):
+1. ONLY modify pixels inside the transparent/masked regions
+2. Every pixel outside the mask MUST remain BYTE-FOR-BYTE IDENTICAL
+3. Do NOT reinterpret, enhance, or "improve" ANY part of the image
+4. MATCH the original text EXACTLY: font style, weight, size, color
+...
+```
+
+**Rationale:**
+
+- Prompts are our PRIMARY lever for preservation with gpt-image-1.5
+- Explicit negative constraints help prevent unwanted modifications
+- Medical/surgical terminology emphasizes precision requirement
+
+**Impact:** Improved raw API output quality before compositing.
+
+---
+
+### ED-024: Multi-Generation with Auto-Selection
+
+**Decision:** Generate n > 1 variants and auto-select best by drift score
+
+**Configuration:**
+
+- Default: n = 1 (single generation)
+- With selection: n = 2-3 (generate multiple, return lowest drift)
+
+**Algorithm:**
+
+1. Generate N variants in single API call
+2. Compute quick drift score for each
+3. Return variant with lowest drift
+4. Log selection for transparency
+
+**Rationale:**
+
+- API variability means some generations are better than others
+- Selection increases probability of good result
+- Single API call for multiple variants is cost-efficient
+
+**Trade-offs:**
+
+- 2-3x API cost when using selection
+- Slightly longer total time
+
+**Impact:** Higher quality raw output before compositing.
+
+---
+
+### ED-025: Image Dimension Handling
+
+**Decision:** Use `size: "auto"` and post-resize to original dimensions
+
+**Problem:**
+
+- Source image: 1080×1920 (ratio 0.5625)
+- API option 1024×1536 (ratio 0.667)
+- Different aspect ratios cause distortion!
+
+**Solution:**
+
+1. Store original dimensions before API call
+2. Use `size: "auto"` to let API optimize
+3. Post-resize output to exact original dimensions
+4. Use Sharp with `fit: "fill"` for precise match
+
+**Implementation:** New `ImageProcessingService` class
+
+**Rationale:**
+
+- `size: "auto"` may produce better quality than forced size
+- Post-resize ensures pixel-perfect dimension match
+- Eliminates vertical compression issue
+
+**Impact:** No more distorted outputs.
+
+---
+
+### ED-026: Streaming with Partial Images (Advanced)
+
+**Decision:** Implement streaming for progressive generation preview
+
+**Parameters:**
+
+```typescript
+{
+  stream: true,
+  partial_images: 2,  // Show 2 progressive previews
+}
+```
+
+**Rationale:**
+
+- Showcases advanced gpt-image-1.5 capability
+- Better UX during ~10-15 second generation
+- Differentiates from basic API wrappers
+
+**Implementation:**
+
+- AsyncGenerator for streaming results
+- UI updates with partial previews
+- Smooth transition to final result
+
+**Impact:** Better UX and API showcase.
+
+---
+
+### ED-027: Drift Threshold Adjustment
+
+**Decision:** Maintain current thresholds, composite mode handles edge cases
+
+**Thresholds (unchanged):**
+
+- PASS: ≤ 2.0%
+- WARN: 2.0% – 5.0%
+- FAIL: > 5.0%
+
+**Rationale:**
+
+- With pixel-perfect composite mode, 0% drift is achievable
+- Raw API output threshold of 5% is reasonable with optimizations
+- Thresholds reflect professional quality standards
+
+**Impact:** Clear quality gates for variant acceptance.
+
+---
+
+### ED-028: Streaming SSE Implementation
+
+**Decision:** Implement streaming via Server-Sent Events (SSE) instead of WebSocket
+
+**Rationale:**
+
+- SSE is simpler for unidirectional streaming (server → client)
+- Better compatibility with Next.js App Router
+- No additional dependencies required
+- Browser support is excellent
+- Easier to implement proper error handling and reconnection
+
+**Implementation:**
+
+- `/api/variant/stream` SSE endpoint using ReadableStream
+- `useStreamingGeneration` React hook for consumption
+- Event types: `start`, `partial`, `processing`, `complete`, `error`
+
+**Impact:** Clean, maintainable streaming implementation that showcases gpt-image-1.5's streaming capability.
+
+---
+
+### ED-029: Icon Preservation via Prompt Engineering
+
+**Decision:** Add explicit icon preservation instructions to prompts rather than creating separate icon masks
+
+**Rationale:**
+
+- Creating separate masks for icons adds complexity
+- The mask already covers text regions that may include adjacent icons
+- Explicit instructions to preserve specific icon counts (e.g., "exactly 3 checkmarks")
+- More robust than trying to detect and mask individual icons
+
+**Implementation:**
+
+- Added "ICON PRESERVATION (CRITICAL)" section to prompts
+- Explicit count constraints ("EXACTLY 3 checkmark icons")
+- Negative constraints ("Do NOT add, remove, duplicate, or modify ANY icons")
+- Both SURGICAL_PROMPT_TEMPLATE and ULTRA_STRICT_PROMPT_TEMPLATE updated
+
+**Trade-off:** Relies on model following instructions rather than technical enforcement. Pixel-perfect composite mode provides fallback guarantee for areas outside mask.
+
+**Impact:** Addresses visual quality issues where icons were being regenerated or duplicated.
+
+---
+
+### ED-030: Streaming Partial Images Count
+
+**Decision:** Default to 2 partial images during streaming
+
+**Rationale:**
+
+- 0 partial images = no progressive preview
+- 1 partial image = one intermediate step
+- 2 partial images = good balance of feedback vs cost (each partial incurs cost)
+- 3 partial images = maximum, but diminishing returns
+
+**Impact:** Good UX balance between real-time feedback and API costs.
+
+---
+
+### ED-031: Streaming UI Integration Pattern
+
+**Decision:** Wire streaming toggle to SSE endpoint via React hook, with conditional canvas rendering
+
+**Date:** 2025-12-18
+
+**Implementation:**
+
+1. Added `useStreamingGeneration` hook to project page
+2. Modified `handleGenerate` to branch based on `streamingEnabled` state:
+   - Single locale: Direct streaming for best UX
+   - Multiple locales: Sequential streaming with progress updates
+   - Disabled: Use existing tRPC mutation
+3. Updated `GenerateStepCanvas` to render `StreamingPreview` when streaming is active
+4. Combined `isGenerating` state: `mutations.isGenerating || streaming.isStreaming`
+
+**Rationale:**
+
+- Hook-based pattern keeps streaming logic encapsulated
+- Conditional branching allows graceful fallback to tRPC
+- Sequential multi-locale streaming provides progress visibility
+- Canvas swaps seamlessly between modes for consistent UX
+
+**Key Files Modified:**
+
+- `src/app/project/[id]/page.tsx` — Hook integration, branching logic
+- `src/components/project/steps/GenerateStep.tsx` — Canvas streaming support
+- `src/hooks/index.ts` — Already exported streaming types
+
+**Impact:** Streaming toggle now produces the "wow factor" progressive image reveal that showcases gpt-image-1.5's streaming capability to contest judges.
+
+---
+
+### ED-032: SSE Parsing Cross-Chunk State Preservation
+
+**Decision:** Move SSE event type tracking variables outside the while loop to preserve state across network chunks
+
+**Date:** 2025-12-18
+
+**Problem:**
+The OpenAI streaming API returns SSE events split across network chunks. If `event: image_edit.partial_image` arrives in one chunk and `data: {...}` arrives in the next, the event type was being lost because variables were reset on each iteration.
+
+**Solution:**
+
+```typescript
+// BEFORE (broken): Variables reset each iteration
+while (true) {
+  let currentEventType = "";  // Reset!
+  // ...
+}
+
+// AFTER (fixed): Variables persist across chunks
+let currentEventType = "";
+while (true) {
+  // currentEventType preserves value from previous chunk
+  // ...
+}
+```
+
+**Key Files:**
+
+- `src/server/services/openaiImage.ts` — Server-side SSE parsing
+- `src/hooks/useStreamingGeneration.ts` — Client-side SSE parsing
+
+**Impact:** Streaming now correctly parses SSE events regardless of how they're chunked by the network, achieving reliable partial image delivery.
+
+---
+
+### ED-033: Mask Auto-Resize to Match Base Image Dimensions
+
+**Decision:** Automatically resize user-drawn masks to match base image dimensions before saving
+
+**Date:** 2025-12-18
+
+**Problem:**
+The canvas displays images at a scaled resolution (540×960 for 1080×1920 base images) for performance and UX. When users draw masks on the canvas and save, the mask was being saved at canvas resolution. OpenAI's image edit API requires the mask to exactly match the base image dimensions, causing "400 Invalid mask image format - mask size does not match image size" errors.
+
+**Solution:**
+In `ImageUploadOrchestrator.uploadMask()`:
+
+1. Get base image from file store
+2. Compare base image dimensions to incoming mask dimensions
+3. If they differ, use sharp to resize mask with `kernel: "nearest"` to preserve hard edges
+4. Save the resized mask
+
+```typescript
+const baseMetadata = await sharp(baseImageBuffer).metadata();
+const maskMetadata = await sharp(maskBuffer).metadata();
+
+if (maskMetadata.width !== baseMetadata.width ||
+    maskMetadata.height !== baseMetadata.height) {
+  maskBuffer = await sharp(maskBuffer)
+    .resize(baseMetadata.width, baseMetadata.height, {
+      fit: "fill",
+      kernel: "nearest", // Preserve hard mask edges
+    })
+    .png()
+    .toBuffer();
+}
+```
+
+**Key Files:**
+
+- `src/server/services/imageUploadOrchestrator.ts` — Mask upload with auto-resize
+
+**Impact:** Users can draw masks at any canvas scale and they will automatically match the base image, ensuring OpenAI API compatibility.
+
+---
+
+### ED-034: Localization Context in Prompts
+
+**Decision:** Frame prompts as localization/translation tasks rather than generic text replacement
+
+**Date:** 2025-12-18
+
+**Problem:**
+The model was producing misaligned text: headlines cut off, bullet text not starting at checkmark positions, button text not centered. The original prompt said "SURGICAL text replacement" but didn't explain WHY we were replacing text.
+
+**Solution:**
+Updated prompts to explicitly state:
+
+1. This is a LOCALIZATION/TRANSLATION task
+2. Text should occupy the EXACT same positions as the original
+3. Checkmarks are anchor points - text starts right after them
+4. Button text should be centered in the button
+5. Headlines stay centered in their container
+
+```typescript
+const SURGICAL_PROMPT_TEMPLATE = `You are a LOCALIZATION TOOL performing text translation on an app store screenshot.
+
+TASK: Replace English text with {LOCALE} translations. This is a SURGICAL text substitution - the translated text must occupy the EXACT same visual positions as the original English text.
+
+LOCALIZATION RULES (CRITICAL):
+1. This is TRANSLATION - you are replacing English words with their {LOCALE} equivalents
+2. The NEW text must START at the SAME position as the original text
+3. If text is next to a checkmark icon, the text starts RIGHT AFTER the checkmark
+4. If text is inside a button, it must be CENTERED in that button
+...`
+```
+
+**Key Files:**
+
+- `src/server/domain/services/localePlan.service.ts` — Updated prompt templates
+
+**Impact:** The model better understands the task context, producing better-aligned text that respects visual anchor points (checkmarks, button bounds).
 
 ---
 

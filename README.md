@@ -10,13 +10,10 @@ Built for the [OpenAI Image Generation API Contest](https://openai.com/).
 
 ## Demo (< 60 seconds)
 
-<!-- TODO: Replace with actual GIF once API access is verified -->
-![Demo Flow Placeholder](docs/screenshots/demo-flow-placeholder.png)
-
 1. **Load Demo Project** — Pre-configured with a sample App Store screenshot
 2. **View Mask** — Text regions are already marked for replacement
-3. **Generate Variants** — Creates Spanish, French, and Arabic versions
-4. **Inspect Drift** — See exactly what changed outside the mask
+3. **Generate Variants** — Creates Spanish, French, and Arabic versions with streaming preview
+4. **Inspect Drift** — See exactly what changed outside the mask (0% with pixel-perfect mode)
 5. **Export** — Download ZIP bundle or 2×2 comparison montage
 
 > **No API key?** Click "Demo Mode" to see pre-generated outputs with full drift analysis.
@@ -26,11 +23,11 @@ Built for the [OpenAI Image Generation API Contest](https://openai.com/).
 ## Key Features
 
 | Feature | Description |
-|---------|-------------|
-| **Mask Editor** | Paint text regions with brush/rectangle tools. Transparent areas get replaced. |
-| **Multi-Locale** | Spanish (es-MX), French (fr-CA), Arabic (ar) with RTL support |
-| **Drift Inspector** | Pixel-level diff detects changes outside the mask. PASS/WARN/FAIL thresholds. |
-| **Heatmap Overlay** | Visual highlighting of unintended modifications |
+| **Mask Editor** | Paint text regions with brush/rectangle/ellipse tools. Keyboard shortcuts included. |
+| **Multi-Locale** | Spanish (es-MX), French (fr-CA), Arabic (ar) with full RTL support |
+| **Streaming Preview** | Watch images generate in real-time with progressive partial reveals |
+| **Pixel-Perfect Mode** | Guaranteed 0% drift outside mask through smart compositing |
+| **Drift Inspector** | Pixel-level diff with PASS/WARN/FAIL thresholds and heatmap overlay |
 | **Regenerate** | One-click retry with stricter constraints for failed variants |
 | **Demo Mode** | Full UX works offline using committed demo outputs |
 | **Export Suite** | Per-locale PNG, ZIP bundle, 2×2 montage grid |
@@ -106,7 +103,6 @@ DATABASE_URL=file:./db.sqlite       # Local SQLite (default)
 ### Supported Locales
 
 | Locale | Language | Direction | Sample Text |
-|--------|----------|-----------|-------------|
 | `es-MX` | Spanish (Mexico) | LTR | "¡Descarga ahora!" |
 | `fr-CA` | French (Canada) | LTR | "Téléchargez maintenant!" |
 | `ar` | Arabic | RTL | "!حمّل الآن" |
@@ -162,7 +158,6 @@ localelens/
 ## Tech Stack
 
 | Layer | Technology |
-|-------|------------|
 | Framework | Next.js 15 (App Router) |
 | Language | TypeScript (strict mode) |
 | API | tRPC v11 |
@@ -212,6 +207,7 @@ pnpm demo:seed    # Copy demo assets for offline demo
 - [Sprint Plan](docs/SPRINTS.md) — Development roadmap
 - [Demo Script](docs/DEMO_SCRIPT.md) — Step-by-step reproduction guide
 - [Engineering Decisions](docs/ENGINEERING_DECISIONS.md) — Technical rationale
+- [API Findings](docs/FINDINGS.md) — Lessons learned and best practices
 
 ---
 

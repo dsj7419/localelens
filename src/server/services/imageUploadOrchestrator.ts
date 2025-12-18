@@ -5,6 +5,7 @@
  * Single responsibility: Coordinate image upload pipeline.
  */
 
+import sharp from "sharp";
 import type { FileStore } from "./fileStore";
 import type { IProjectRepository, IMaskRepository } from "../domain/repositories/project.repository";
 import type { Project, Mask } from "../domain/entities/project";
@@ -76,15 +77,44 @@ export class ImageUploadOrchestrator implements IImageUploadOrchestrator {
    *
    * Pipeline:
    * 1. Decode base64 to buffer
-   * 2. Save to file store
-   * 3. Create or update mask record
+   * 2. Get base image dimensions
+   * 3. Resize mask to match base image (ED-033)
+   * 4. Save to file store
+   * 5. Create or update mask record
    */
   async uploadMask(base64Data: string): Promise<MaskUploadResult> {
     const { fileStore, maskRepo } = this.deps;
 
     // Decode base64
     const cleanBase64 = base64Data.replace(/^data:image\/\w+;base64,/, "");
-    const maskBuffer = Buffer.from(cleanBase64, "base64");
+    let maskBuffer: Buffer = Buffer.from(cleanBase64, "base64");
+
+    // Get base image to determine target dimensions
+    const baseImageBuffer = await fileStore.getBaseImage();
+    if (baseImageBuffer) {
+      const baseMetadata = await sharp(baseImageBuffer).metadata();
+      const maskMetadata = await sharp(maskBuffer).metadata();
+
+      // Resize mask if dimensions don't match base image
+      if (
+        baseMetadata.width &&
+        baseMetadata.height &&
+        (maskMetadata.width !== baseMetadata.width ||
+          maskMetadata.height !== baseMetadata.height)
+      ) {
+        console.log(
+          `[ImageUploadOrchestrator] Resizing mask from ${maskMetadata.width}×${maskMetadata.height} to ${baseMetadata.width}×${baseMetadata.height}`
+        );
+        const resizedBuffer = await sharp(maskBuffer)
+          .resize(baseMetadata.width, baseMetadata.height, {
+            fit: "fill", // Exact resize to match dimensions
+            kernel: "nearest", // Preserve hard edges in mask
+          })
+          .png()
+          .toBuffer();
+        maskBuffer = resizedBuffer as Buffer;
+      }
+    }
 
     // Save to file store
     const filePath = await fileStore.saveMaskImage(maskBuffer);

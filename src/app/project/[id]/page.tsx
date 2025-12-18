@@ -34,6 +34,7 @@ import {
   useWorkflow,
   useResultsState,
   useKeyboardShortcuts,
+  useStreamingGeneration,
 } from "~/hooks";
 import { SUPPORTED_LOCALES, type LocaleId } from "~/server/domain/value-objects/locale";
 
@@ -74,6 +75,10 @@ export default function ProjectPage() {
   const [generationProgress, setGenerationProgress] = useState(0);
   const [isDemoMode, setIsDemoMode] = useState(false);
   const [currentGeneratingLocale, setCurrentGeneratingLocale] = useState<LocaleId | null>(null);
+  const [streamingEnabled, setStreamingEnabled] = useState(false);
+
+  // Streaming generation hook for gpt-image-1.5 progressive preview
+  const streaming = useStreamingGeneration();
 
   // ─────────────────────────────────────────────────────────────────────────────
   // Mutations
@@ -125,11 +130,60 @@ export default function ProjectPage() {
     );
   }, []);
 
-  const handleGenerate = useCallback(() => {
+  const handleGenerate = useCallback(async () => {
     setIsDemoMode(false);
     setGenerationProgress(0);
-    mutations.handleGenerate(selectedLocales);
-  }, [selectedLocales, mutations]);
+
+    if (streamingEnabled && selectedLocales.length === 1) {
+      // Use streaming endpoint for single locale (best streaming experience)
+      const locale = selectedLocales[0]!;
+      setCurrentGeneratingLocale(locale);
+
+      const result = await streaming.generate({
+        projectId,
+        locale,
+        pixelPerfect: true,
+        partialImages: 2,
+      });
+
+      if (result) {
+        setGenerationProgress(100);
+        await queries.refetchProject();
+        workflow.goToResults();
+        results.selectFirstVariant(selectedLocales);
+      }
+
+      setCurrentGeneratingLocale(null);
+    } else if (streamingEnabled && selectedLocales.length > 1) {
+      // Sequential streaming for multiple locales
+      for (let i = 0; i < selectedLocales.length; i++) {
+        const locale = selectedLocales[i]!;
+        setCurrentGeneratingLocale(locale);
+        setGenerationProgress(Math.round((i / selectedLocales.length) * 100));
+
+        const result = await streaming.generate({
+          projectId,
+          locale,
+          pixelPerfect: true,
+          partialImages: 2,
+        });
+
+        if (!result) {
+          console.error(`[ProjectPage] Streaming failed for ${locale}`);
+          // Continue with next locale even if one fails
+        }
+      }
+
+      setGenerationProgress(100);
+      setCurrentGeneratingLocale(null);
+      await queries.refetchProject();
+      workflow.goToResults();
+      results.selectFirstVariant(selectedLocales);
+    } else {
+      // Use existing tRPC mutation (non-streaming)
+      mutations.handleGenerate(selectedLocales);
+    }
+  }, [streamingEnabled, selectedLocales, projectId, streaming, mutations, queries, workflow, results]);
 
   const handleDemoMode = useCallback(() => {
     setIsDemoMode(true);
@@ -241,10 +295,12 @@ export default function ProjectPage() {
         return (
           <GenerateStepSidebar
             selectedLocales={selectedLocales}
-            isGenerating={mutations.isGenerating}
+            isGenerating={mutations.isGenerating || streaming.isStreaming}
             isDemoMode={isDemoMode}
             progress={generationProgress}
             isDemoProject={queries.isDemoProject}
+            streamingEnabled={streamingEnabled}
+            onStreamingChange={setStreamingEnabled}
             onLocaleToggle={handleLocaleToggle}
             onSelectAll={() => setSelectedLocales([...SUPPORTED_LOCALES])}
             onClearAll={() => setSelectedLocales([])}
@@ -308,8 +364,15 @@ export default function ProjectPage() {
             selectedLocales={selectedLocales}
             canvasWidth={CANVAS_WIDTH}
             canvasHeight={CANVAS_HEIGHT}
-            isGenerating={mutations.isGenerating}
+            isGenerating={mutations.isGenerating || streaming.isStreaming}
             currentLocale={currentGeneratingLocale}
+            // Streaming props
+            streamingEnabled={streamingEnabled}
+            isStreaming={streaming.isStreaming}
+            streamingProgress={streaming.progress}
+            streamingPartialImages={streaming.partialImages}
+            streamingResult={streaming.result}
+            streamingError={streaming.error}
           />
         );
 

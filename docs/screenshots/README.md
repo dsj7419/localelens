@@ -5,7 +5,6 @@ Screenshots for the README gallery. Capture after generating real outputs.
 ## Required Screenshots
 
 | Filename | Description |
-|----------|-------------|
 | `demo-flow-placeholder.png` | Animated GIF or hero image showing the workflow |
 | `homepage-placeholder.png` | Landing page with project list |
 | `mask-editor-placeholder.png` | MaskCanvas with brush tool active |

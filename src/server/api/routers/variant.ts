@@ -27,11 +27,15 @@ import {
 const generateVariantSchema = z.object({
   projectId: z.string().cuid(),
   locale: z.enum(SUPPORTED_LOCALES),
+  /** Enable pixel-perfect mode for 0% drift (default: true) */
+  pixelPerfect: z.boolean().default(true),
 });
 
 const generateAllVariantsSchema = z.object({
   projectId: z.string().cuid(),
   locales: z.array(z.enum(SUPPORTED_LOCALES)).min(1).max(3),
+  /** Enable pixel-perfect mode for 0% drift (default: true) */
+  pixelPerfect: z.boolean().default(true),
 });
 
 export const variantRouter = createTRPCRouter({
@@ -41,7 +45,7 @@ export const variantRouter = createTRPCRouter({
   generate: publicProcedure
     .input(generateVariantSchema)
     .mutation(async ({ ctx, input }) => {
-      const { projectId, locale } = input;
+      const { projectId, locale, pixelPerfect } = input;
 
       // Load dependencies
       const projectRepo = new PrismaProjectRepository(ctx.db);
@@ -77,11 +81,11 @@ export const variantRouter = createTRPCRouter({
       // Build prompt
       const prompt = localePlanService.buildPrompt(locale);
 
-      console.log(`[VariantRouter] Generating ${getLocaleMetadata(locale).name} variant`);
+      console.log(`[VariantRouter] Generating ${getLocaleMetadata(locale).name} variant (pixelPerfect: ${pixelPerfect})`);
 
       // Delegate to service
       const result = await variantGenService.generateVariant(
-        { projectId, locale, prompt, baseImageBuffer, maskBuffer },
+        { projectId, locale, prompt, baseImageBuffer, maskBuffer, pixelPerfect },
         imageService,
         fileStore,
         variantRepo
@@ -111,7 +115,7 @@ export const variantRouter = createTRPCRouter({
   generateAll: publicProcedure
     .input(generateAllVariantsSchema)
     .mutation(async ({ ctx, input }) => {
-      const { projectId, locales } = input;
+      const { projectId, locales, pixelPerfect } = input;
       const results: Array<{
         locale: LocaleId;
         success: boolean;
@@ -154,13 +158,13 @@ export const variantRouter = createTRPCRouter({
       for (const locale of locales) {
         const localeMetadata = getLocaleMetadata(locale);
         console.log(
-          `[VariantRouter] Generating ${localeMetadata.name} variant (${locales.indexOf(locale) + 1}/${locales.length})`
+          `[VariantRouter] Generating ${localeMetadata.name} variant (${locales.indexOf(locale) + 1}/${locales.length}, pixelPerfect: ${pixelPerfect})`
         );
 
         const prompt = localePlanService.buildPrompt(locale);
 
         const result = await variantGenService.generateVariant(
-          { projectId, locale, prompt, baseImageBuffer, maskBuffer },
+          { projectId, locale, prompt, baseImageBuffer, maskBuffer, pixelPerfect },
           imageService,
           fileStore,
           variantRepo
@@ -220,10 +224,12 @@ export const variantRouter = createTRPCRouter({
       z.object({
         projectId: z.string().cuid(),
         locale: z.enum(SUPPORTED_LOCALES),
+        /** Enable pixel-perfect mode for 0% drift (default: true) */
+        pixelPerfect: z.boolean().default(true),
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const { projectId, locale } = input;
+      const { projectId, locale, pixelPerfect } = input;
 
       // Load dependencies
       const projectRepo = new PrismaProjectRepository(ctx.db);
@@ -247,13 +253,13 @@ export const variantRouter = createTRPCRouter({
       const maskBuffer = await fileStore.getMaskImage();
       if (!maskBuffer) throw new Error("Mask image not found");
 
-      // Use stricter prompt
-      const prompt = localePlanService.buildStricterPrompt(locale);
+      // Use ultra-strict prompt for regeneration
+      const prompt = localePlanService.buildUltraStrictPrompt(locale);
 
-      console.log(`[VariantRouter] Regenerating ${getLocaleMetadata(locale).name} with stricter constraints`);
+      console.log(`[VariantRouter] Regenerating ${getLocaleMetadata(locale).name} with ultra-strict constraints (pixelPerfect: ${pixelPerfect})`);
 
       const result = await variantGenService.generateVariant(
-        { projectId, locale, prompt, baseImageBuffer, maskBuffer },
+        { projectId, locale, prompt, baseImageBuffer, maskBuffer, pixelPerfect },
         imageService,
         fileStore,
         variantRepo

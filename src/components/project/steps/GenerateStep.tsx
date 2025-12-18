@@ -3,13 +3,19 @@
  *
  * Renders the Generate step UI (sidebar + canvas).
  * Single responsibility: Generate step presentation.
+ *
+ * Enhanced for gpt-image-1.5 streaming showcase:
+ * - Shows StreamingPreview when streaming is active
+ * - Displays progressive image reveal for wow factor
  */
 
 "use client";
 
 import { Badge } from "~/components/ui/badge";
 import { GenerateSidebar } from "../sidebar";
+import { StreamingPreview } from "../StreamingPreview";
 import { LOCALE_REGISTRY, type LocaleId } from "~/server/domain/value-objects/locale";
+import type { StreamingProgress, StreamingResult } from "~/hooks/useStreamingGeneration";
 
 interface GenerateStepSidebarProps {
   selectedLocales: LocaleId[];
@@ -17,6 +23,10 @@ interface GenerateStepSidebarProps {
   isDemoMode: boolean;
   progress: number;
   isDemoProject: boolean;
+  /** Enable streaming mode with progressive image preview */
+  streamingEnabled?: boolean;
+  /** Callback when streaming toggle changes */
+  onStreamingChange?: (enabled: boolean) => void;
   onLocaleToggle: (locale: LocaleId) => void;
   onSelectAll: () => void;
   onClearAll: () => void;
@@ -33,6 +43,13 @@ interface GenerateStepCanvasProps {
   canvasHeight: number;
   isGenerating?: boolean;
   currentLocale?: LocaleId | null;
+  // Streaming props for gpt-image-1.5 showcase
+  streamingEnabled?: boolean;
+  isStreaming?: boolean;
+  streamingProgress?: StreamingProgress;
+  streamingPartialImages?: string[];
+  streamingResult?: StreamingResult | null;
+  streamingError?: string | null;
 }
 
 export function GenerateStepSidebar({
@@ -41,6 +58,8 @@ export function GenerateStepSidebar({
   isDemoMode,
   progress,
   isDemoProject,
+  streamingEnabled,
+  onStreamingChange,
   onLocaleToggle,
   onSelectAll,
   onClearAll,
@@ -54,6 +73,8 @@ export function GenerateStepSidebar({
       isGenerating={isGenerating}
       isDemoMode={isDemoMode}
       progress={progress}
+      streamingEnabled={streamingEnabled}
+      onStreamingChange={onStreamingChange}
       onLocaleToggle={onLocaleToggle}
       onSelectAll={onSelectAll}
       onClearAll={onClearAll}
@@ -72,7 +93,34 @@ export function GenerateStepCanvas({
   canvasHeight,
   isGenerating,
   currentLocale,
+  // Streaming props
+  streamingEnabled,
+  isStreaming,
+  streamingProgress,
+  streamingPartialImages,
+  streamingResult,
+  streamingError,
 }: GenerateStepCanvasProps) {
+  // Show StreamingPreview when streaming is active
+  if (streamingEnabled && isStreaming && currentLocale && streamingProgress) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <StreamingPreview
+          progress={streamingProgress}
+          partialImages={streamingPartialImages ?? []}
+          result={streamingResult ?? null}
+          error={streamingError ?? null}
+          locale={currentLocale}
+          baseImageUrl={baseImageUrl}
+          width={canvasWidth}
+          height={canvasHeight}
+          showUsage={true}
+        />
+      </div>
+    );
+  }
+
+  // Default non-streaming view
   return (
     <div className="flex items-center justify-center h-full">
       <div className="relative" style={{ width: canvasWidth, height: canvasHeight }}>
@@ -98,7 +146,7 @@ export function GenerateStepCanvas({
         )}
 
         {/* Generation overlay */}
-        {isGenerating && (
+        {isGenerating && !isStreaming && (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-background/40 backdrop-blur-sm rounded-lg animate-in fade-in duration-300">
             {/* Animated spinner */}
             <div className="relative mb-4">
