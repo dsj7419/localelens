@@ -233,11 +233,190 @@ STRICT RULES:
 
 ---
 
-## Future Decisions (Pending)
+## Sprint 2 Decisions
 
-- **ED-013:** Drift calculation algorithm and thresholds (Sprint 2)
-- **ED-014:** Montage layout and sizing (Sprint 2)
-- **ED-015:** Export ZIP structure (Sprint 2)
+### ED-013: Drift Calculation Algorithm
+
+**Decision:** Pixel-by-pixel RGB comparison with Euclidean distance
+
+**Implementation:**
+- Compare each pixel outside mask between original and variant
+- Use Euclidean distance in RGB space: `sqrt((r1-r2)² + (g1-g2)² + (b1-b2)²)`
+- Threshold: distance > 30 = "changed pixel"
+- Score = (changed pixels outside mask) / (total pixels outside mask) * 100
+
+**Thresholds:**
+- PASS: ≤ 2.0%
+- WARN: 2.0% – 5.0%
+- FAIL: > 5.0%
+
+**Impact:** Provides meaningful QA signal that distinguishes LocaleLens from basic wrappers.
+
+---
+
+### ED-014: Montage Layout
+
+**Decision:** 2×2 grid with labels, dark theme
+
+**Layout:**
+```
+┌──────────────┬──────────────┐
+│   Original   │   Spanish    │
+│   (English)  │   (es-MX)    │
+├──────────────┼──────────────┤
+│   French     │   Arabic     │
+│   (fr-CA)    │   (ar)       │
+└──────────────┴──────────────┘
+```
+
+**Rationale:** Fits README display, shows all 4 images at comparable size.
+
+---
+
+### ED-015: Export ZIP Structure
+
+**Decision:** Flat structure with clear naming
+
+**Structure:**
+```
+localelens_{projectId}_variants.zip
+├── base.png
+├── mask.png
+├── variants/
+│   ├── es-MX.png
+│   ├── fr-CA.png
+│   └── ar.png
+├── drift/
+│   ├── es-MX_heatmap.png
+│   ├── fr-CA_heatmap.png
+│   └── ar_heatmap.png
+├── montage_2x2.png
+└── README.txt
+```
+
+---
+
+## Sprint 4 Decisions (UI/UX Refactoring)
+
+### ED-016: SOLID/SRP Frontend Architecture Refactoring
+
+**Decision:** Complete architectural refactoring to achieve full SOLID compliance
+
+**Date:** 2025-12-17
+
+**Rationale:**
+- Original `page.tsx` was 600+ lines doing everything (state, queries, mutations, rendering)
+- Router `project.ts` was 430+ lines with orchestration logic mixed into handlers
+- Violated Single Responsibility Principle throughout
+
+**New Architecture:**
+
+```text
+src/
+├── hooks/                          # Custom React hooks (SRP)
+│   ├── useProjectQueries.ts        # Data fetching orchestration
+│   ├── useProjectMutations.ts      # Mutation orchestration
+│   ├── useMaskEditor.ts            # Mask editor state
+│   ├── useWorkflow.ts              # Step navigation logic
+│   ├── useResultsState.ts          # Results display state
+│   └── index.ts                    # Re-exports
+├── components/project/
+│   ├── steps/                      # Step-based components (SRP)
+│   │   ├── UploadStep.tsx          # Upload sidebar + canvas
+│   │   ├── MaskStep.tsx            # Mask sidebar + canvas
+│   │   ├── GenerateStep.tsx        # Generate sidebar + canvas
+│   │   └── ResultsStep.tsx         # Results sidebar + canvas
+│   ├── sidebar/                    # Sidebar-only components
+│   │   ├── UploadSidebar.tsx
+│   │   ├── MaskSidebar.tsx
+│   │   ├── GenerateSidebar.tsx
+│   │   └── ResultsSidebar.tsx
+│   ├── MaskCanvasCore.tsx          # Imperative canvas API
+│   ├── StepProgress.tsx            # Workflow indicator
+│   └── ToolButton.tsx              # Reusable tool components
+└── server/services/
+    ├── imageUploadOrchestrator.ts  # Upload pipeline coordination
+    └── exportOrchestrator.ts       # Export pipeline coordination
+```
+
+**Metrics:**
+- `page.tsx`: 600 → 360 lines (-40%)
+- `project.ts` router: 430 → 267 lines (-38%)
+- 30 new files created with clear single responsibilities
+
+**Impact:** Professional, maintainable, testable codebase suitable for contest submission.
+
+---
+
+### ED-017: Sidebar + Canvas Layout
+
+**Decision:** Fixed-width sidebar (288px) with flexible canvas area
+
+**Previous Approach:** Attempted resizable panels, but caused UX issues (toolbar overlap)
+
+**Final Approach:**
+```text
+┌────────────────────────────────────────────────────────┐
+│  Header: Logo | Project Name | Step Progress | Badge  │
+├──────────┬─────────────────────────────────────────────┤
+│          │                                             │
+│  Sidebar │              Canvas Area                    │
+│  (w-72)  │            (flex-1, centered)               │
+│          │                                             │
+│  Tools   │                                             │
+│  Actions │                                             │
+│          │                                             │
+└──────────┴─────────────────────────────────────────────┘
+```
+
+**Rationale:** Fixed width ensures consistent tool visibility; simpler than resizable panels.
+
+---
+
+### ED-018: Step-Based Workflow UI
+
+**Decision:** Four-step workflow with progress indicator
+
+**Steps:**
+1. **Upload** — Upload base image or load demo
+2. **Mask** — Paint editable regions with tools
+3. **Generate** — Select locales and generate variants
+4. **Results** — Compare variants, view drift, export
+
+**Navigation Rules:**
+- Can only advance when current step requirements are met
+- Can always go back to completed steps
+- Progress indicator shows completed/active/disabled states
+
+---
+
+### ED-019: Conditional Demo Features
+
+**Decision:** Demo-specific buttons only show for demo projects
+
+**Implementation:**
+```typescript
+const isDemoProject = project?.name?.toLowerCase().includes("demo") ?? false;
+
+// Only show "Load Demo Mask" for demo projects
+onLoadDemo={isDemoProject ? handleLoadDemoMask : undefined}
+
+// Only show "Demo Mode" generation for demo projects
+onDemoMode={isDemoProject ? handleDemoMode : undefined}
+```
+
+**Rationale:** Non-demo projects shouldn't have demo buttons cluttering the UI.
+
+---
+
+## Pending Decisions (Visual Polish Sprint)
+
+- **ED-020:** Glass morphism styling approach (pending)
+- **ED-021:** Animation and transition system (pending)
+- **ED-022:** Loading states during generation (pending)
+- **ED-023:** Keyboard shortcuts implementation (pending)
+- **ED-024:** Error boundary strategy (pending)
+- **ED-025:** Mobile/responsive breakpoints (pending)
 
 ---
 

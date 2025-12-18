@@ -13,8 +13,15 @@
 | Sprint 1 | **COMPLETE** | 2025-12-17 |
 | Sprint 2 | **COMPLETE** | 2025-12-17 |
 | Sprint 3 | **COMPLETE** | 2025-12-17 |
+| Sprint 4 | **COMPLETE** | 2025-12-18 |
+| Sprint 5 | **PENDING** | - |
 
-**Note:** All sprints code complete. Demo Mode allows full UX testing without API access. Pending: generate real variant outputs once OpenAI organization is verified.
+**Current State:**
+- Core functionality complete and working
+- SOLID/SRP architecture refactoring complete
+- OpenAI Image Edit API integration verified working (gpt-image-1.5)
+- Demo Mode allows full UX testing without API access
+- **Pending:** Visual polish sprint (animations, loading states, glass morphism) for contest-winning presentation
 
 ---
 
@@ -325,24 +332,148 @@ Make the repo “judge-optimized”: fast setup, clear docs, impressive screensh
 
 ---
 
-## 6) Sprint 4 (Optional) — Bonus Features (Only if time remains)
+## 6) Sprint 4 — SOLID/SRP Architecture Refactoring
 
-### 6.1 Candidate features
+> **STATUS: COMPLETE** (2025-12-18)
 
-- Mask region “suggestions” (semi-automatic bounding boxes)
-- Batch mode: multiple images, same locales
-- Preset templates (App Store, Poster, Banner)
-- “Compact copy” auto-variants for German/long text languages
+### 6.1 Sprint goal
 
-### 6.2 Rule
+Refactor the codebase to achieve full SOLID/SRP compliance, making it maintainable, testable, and professional-grade.
 
-Only execute Sprint 4 if Sprints 0–3 are fully complete and stable.
+### 6.2 Scope (completed)
+
+1) **Custom Hooks Layer** (`src/hooks/`)
+   - `useProjectQueries` — Centralized data fetching orchestration
+   - `useProjectMutations` — Mutation orchestration with callbacks
+   - `useMaskEditor` — Mask editor state and canvas operations
+   - `useWorkflow` — Step navigation and progression logic
+   - `useResultsState` — Results display state management
+   - `useVariantImage` — Single variant image fetching (replaces broken useVariantImages)
+
+2) **Step Components** (`src/components/project/steps/`)
+   - `UploadStep` — Upload sidebar + canvas
+   - `MaskStep` — Mask sidebar + canvas
+   - `GenerateStep` — Generate sidebar + canvas
+   - `ResultsStep` — Results sidebar + canvas
+
+3) **Sidebar Components** (`src/components/project/sidebar/`)
+   - `UploadSidebar` — File upload and demo loader controls
+   - `MaskSidebar` — Tool palette with brushes, shapes, history
+   - `GenerateSidebar` — Locale selection with progress tracking
+   - `ResultsSidebar` — Variant list with drift badges and export
+
+4) **Backend Orchestrators** (`src/server/services/`)
+   - `ImageUploadOrchestrator` — Base64 decode → file save → DB update pipeline
+   - `ExportOrchestrator` — Montage/ZIP generation pipeline
+
+5) **Router Simplification**
+   - `project.ts`: Reduced from 430 → 267 lines (-38%)
+   - Thin delegation layer to orchestrators and repositories
+
+6) **UI Components**
+   - `MaskCanvasCore` — Imperative canvas API for mask editing
+   - `StepProgress` — Workflow progress indicator
+   - `ToolButton/ToolGroup` — Reusable tool palette primitives
+   - New shadcn/ui components: resizable, scroll-area, slider, toggle, tooltip
+
+### 6.3 Acceptance criteria (met)
+
+- ✅ All TypeScript strict mode compliant
+- ✅ Page component under 400 lines
+- ✅ Router handlers under 10 lines each (delegation only)
+- ✅ Each hook has single responsibility
+- ✅ Each step component renders one workflow step
+- ✅ No React hooks rule violations
+
+### 6.4 Metrics achieved
+
+- `page.tsx`: 600 → 360 lines (-40%)
+- `project.ts`: 430 → 267 lines (-38%)
+- 30 new files with clear single responsibilities
 
 ---
 
-## 7) Engineering Quality Standards (applies to all sprints)
+## 7) Sprint 5 — Visual Polish (Contest-Winning Presentation)
 
-### 7.1 Code standards
+> **STATUS: PENDING**
+
+### 7.1 Sprint goal
+
+Transform the functional UI into a visually impressive, contest-winning presentation that creates immediate "wow factor" for judges.
+
+### 7.2 Scope (must ship)
+
+1) **Glass Morphism Styling**
+   - Frosted glass effect on sidebar
+   - Subtle backdrop blur on modals/overlays
+   - Modern, premium aesthetic
+
+2) **Animations & Transitions**
+   - Step transitions (fade/slide between workflow steps)
+   - Tool selection feedback
+   - Progress indicator animations
+   - Canvas state transitions
+
+3) **Loading States**
+   - Skeleton loaders for images
+   - Progress bar during generation (not just spinner)
+   - Estimated time remaining during generation
+   - Per-locale progress indicators
+
+4) **Empty States**
+   - Designed empty state illustrations
+   - Helpful guidance text
+   - Clear call-to-action buttons
+
+5) **Error Handling**
+   - Error boundary with graceful fallback
+   - User-friendly error messages
+   - Retry options for failed operations
+
+6) **Keyboard Shortcuts**
+   - Ctrl+Z/Y for undo/redo (with visual indicator)
+   - B/R/E for brush/rectangle/ellipse tools
+   - Number keys for quick locale selection
+
+7) **Responsive Considerations**
+   - Minimum supported width (1024px)
+   - Graceful degradation message for mobile
+
+### 7.3 Acceptance criteria
+
+- [ ] First impression is visually impressive (not just functional)
+- [ ] Animations are smooth and purposeful
+- [ ] Loading states provide meaningful feedback
+- [ ] No jarring transitions or layout shifts
+
+### 7.4 Priority order
+
+1. Loading states during generation (most impactful for demo)
+2. Glass morphism on sidebar (premium feel)
+3. Step transitions (professional workflow)
+4. Error handling (robustness)
+5. Keyboard shortcuts (power users)
+
+---
+
+## 8) Sprint 6 (Optional) — Bonus Features
+
+### 8.1 Candidate features
+
+- Mask region "suggestions" (semi-automatic bounding boxes)
+- Batch mode: multiple images, same locales
+- Preset templates (App Store, Poster, Banner)
+- "Compact copy" auto-variants for German/long text languages
+
+### 8.2 Rule
+
+Only execute Sprint 6 if Sprints 0–5 are fully complete and stable.
+
+---
+
+## 9) Engineering Quality Standards (applies to all sprints)
+
+### 9.1 Code standards
 
 - Strict TypeScript, no `any` in core services
 - Deterministic file naming
@@ -352,7 +483,7 @@ Only execute Sprint 4 if Sprints 0–3 are fully complete and stable.
   - services
   - storage layer
 
-### 7.2 Testing
+### 9.2 Testing
 
 - Unit tests where high-value:
   - drift scoring correctness
@@ -361,7 +492,7 @@ Only execute Sprint 4 if Sprints 0–3 are fully complete and stable.
 - Manual tests:
   - end-to-end demo script
 
-### 7.3 Logging
+### 9.3 Logging
 
 - Server logs must include:
   - projectId
@@ -372,7 +503,7 @@ Only execute Sprint 4 if Sprints 0–3 are fully complete and stable.
 
 ---
 
-## 8) Definition of “1st Prize” Readiness
+## 10) Definition of "1st Prize" Readiness
 
 LocaleLens is “1st prize ready” when:
 
