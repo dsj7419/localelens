@@ -4,7 +4,7 @@ import { useRef, useEffect, useState, useCallback } from "react";
 import { Button } from "~/components/ui/button";
 import { Separator } from "~/components/ui/separator";
 import { useMaskHistory } from "./hooks/useMaskHistory";
-import { Undo2, Redo2, Paintbrush, Eraser, Square, Trash2, Grid3X3 } from "lucide-react";
+import { Undo2, Redo2, Paintbrush, Shield, Square, Trash2, Maximize2 } from "lucide-react";
 
 interface MaskCanvasProps {
   baseImageUrl: string | null;
@@ -15,21 +15,19 @@ interface MaskCanvasProps {
   height?: number;
 }
 
-type Tool = "select" | "deselect" | "rectangle";
+type Tool = "edit" | "keep" | "rectangle";
 
 /**
  * MaskCanvas Component
  *
  * Canvas-based mask editor for defining editable regions.
+ * Uses the SAME format as OpenAI API expects:
+ * - Opaque (black) = Protected (AI will NOT edit these areas)
+ * - Transparent = Editable (AI WILL edit these areas)
  *
- * Mask Logic:
- * - Transparent (clear) = AI WILL edit this region
- * - White (opaque) = AI will NOT edit this region
- *
- * Tools:
- * - Select: Mark regions for AI editing (makes transparent)
- * - Deselect: Protect regions from AI editing (makes white)
- * - Rectangle: Quick rectangular selection
+ * Visual Display:
+ * - Black areas shown as dark overlay = Protected/Keep
+ * - Transparent areas show base image clearly = Will be edited
  */
 export function MaskCanvas({
   baseImageUrl,
@@ -44,7 +42,7 @@ export function MaskCanvas({
   const containerRef = useRef<HTMLDivElement>(null);
 
   const [isDrawing, setIsDrawing] = useState(false);
-  const [tool, setTool] = useState<Tool>("select");
+  const [tool, setTool] = useState<Tool>("edit");
   const [brushSize, setBrushSize] = useState(30);
   const [hasChanges, setHasChanges] = useState(false);
   const [maskVersion, setMaskVersion] = useState(0);
@@ -57,7 +55,7 @@ export function MaskCanvas({
     useMaskHistory(canvasRef);
 
   /**
-   * Initialize or reset canvas to fully protected (white)
+   * Initialize canvas to fully protected (black fill)
    */
   const initializeCanvas = useCallback(() => {
     const canvas = canvasRef.current;
@@ -74,9 +72,8 @@ export function MaskCanvas({
     overlay.width = width;
     overlay.height = height;
 
-    // Initialize to fully protected (white)
-    ctx.globalCompositeOperation = "source-over";
-    ctx.fillStyle = "rgba(255, 255, 255, 1)";
+    // Initialize to fully protected (black = opaque = AI won't edit)
+    ctx.fillStyle = "#000000";
     ctx.fillRect(0, 0, width, height);
 
     // Clear overlay
@@ -96,10 +93,9 @@ export function MaskCanvas({
     const img = new Image();
     img.crossOrigin = "anonymous";
     img.onload = () => {
-      // Reset composite operation before drawing
-      ctx.globalCompositeOperation = "source-over";
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.drawImage(img, 0, 0, width, height);
+
       setHasChanges(false);
       initHistory();
     };
@@ -126,7 +122,6 @@ export function MaskCanvas({
   const handleLoadDemoMask = useCallback(() => {
     if (onLoadDemoMask) {
       onLoadDemoMask();
-      // Increment version to force reload even if URL is the same
       setMaskVersion((v) => v + 1);
     }
   }, [onLoadDemoMask]);
@@ -134,7 +129,6 @@ export function MaskCanvas({
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Check if we're focused on the canvas area
       if (!containerRef.current?.contains(document.activeElement) &&
           document.activeElement !== document.body) {
         return;
@@ -187,19 +181,19 @@ export function MaskCanvas({
       ctx.beginPath();
       ctx.arc(x, y, brushSize, 0, Math.PI * 2);
 
-      if (tool === "select") {
+      if (tool === "edit") {
         // Make transparent = AI will edit here
         ctx.globalCompositeOperation = "destination-out";
+        ctx.fillStyle = "#000000";
         ctx.fill();
-      } else if (tool === "deselect") {
-        // Make white = AI will NOT edit here
         ctx.globalCompositeOperation = "source-over";
-        ctx.fillStyle = "rgba(255, 255, 255, 1)";
+      } else if (tool === "keep") {
+        // Make black (opaque) = AI will NOT edit here
+        ctx.globalCompositeOperation = "source-over";
+        ctx.fillStyle = "#000000";
         ctx.fill();
       }
 
-      // Always reset composite operation
-      ctx.globalCompositeOperation = "source-over";
       setHasChanges(true);
     },
     [brushSize, tool]
@@ -210,8 +204,11 @@ export function MaskCanvas({
     (e: React.MouseEvent<HTMLCanvasElement>) => {
       const coords = getCanvasCoords(e);
 
-      // Save state for undo BEFORE making changes
-      saveState();
+      // Save baseline state only on very first operation
+      // (subsequent saves happen on mouseUp)
+      if (!canUndo && !canRedo) {
+        saveState();
+      }
 
       if (tool === "rectangle") {
         setRectStart(coords);
@@ -220,7 +217,28 @@ export function MaskCanvas({
         draw(coords.x, coords.y);
       }
     },
-    [tool, getCanvasCoords, draw, saveState]
+    [tool, getCanvasCoords, draw, saveState, canUndo, canRedo]
+  );
+
+  // Draw brush preview cursor on overlay
+  const drawBrushPreview = useCallback(
+    (x: number, y: number) => {
+      const overlay = overlayRef.current;
+      if (!overlay) return;
+
+      const ctx = overlay.getContext("2d");
+      if (!ctx) return;
+
+      ctx.clearRect(0, 0, overlay.width, overlay.height);
+      ctx.beginPath();
+      ctx.arc(x, y, brushSize, 0, Math.PI * 2);
+      // Blue for edit (erase), orange for keep (protect)
+      ctx.strokeStyle = tool === "edit" ? "rgba(59, 130, 246, 0.8)" : "rgba(249, 115, 22, 0.8)";
+      ctx.lineWidth = 2;
+      ctx.setLineDash([]);
+      ctx.stroke();
+    },
+    [brushSize, tool]
   );
 
   const handleMouseMove = useCallback(
@@ -228,7 +246,6 @@ export function MaskCanvas({
       const coords = getCanvasCoords(e);
 
       if (tool === "rectangle" && rectStart) {
-        // Draw preview rectangle on overlay
         const overlay = overlayRef.current;
         if (!overlay) return;
 
@@ -245,11 +262,15 @@ export function MaskCanvas({
           coords.x - rectStart.x,
           coords.y - rectStart.y
         );
-      } else if (isDrawing) {
-        draw(coords.x, coords.y);
+      } else if (tool !== "rectangle") {
+        drawBrushPreview(coords.x, coords.y);
+
+        if (isDrawing) {
+          draw(coords.x, coords.y);
+        }
       }
     },
-    [tool, rectStart, isDrawing, getCanvasCoords, draw]
+    [tool, rectStart, isDrawing, getCanvasCoords, draw, drawBrushPreview]
   );
 
   const handleMouseUp = useCallback(
@@ -264,31 +285,30 @@ export function MaskCanvas({
           const overlayCtx = overlay.getContext("2d");
 
           if (ctx && overlayCtx) {
-            // Clear overlay
             overlayCtx.clearRect(0, 0, overlay.width, overlay.height);
 
-            // Draw rectangle on mask (make transparent = editable)
-            ctx.globalCompositeOperation = "destination-out";
-            ctx.fillRect(
-              Math.min(rectStart.x, coords.x),
-              Math.min(rectStart.y, coords.y),
-              Math.abs(coords.x - rectStart.x),
-              Math.abs(coords.y - rectStart.y)
-            );
-            // Reset composite operation
-            ctx.globalCompositeOperation = "source-over";
+            const x = Math.min(rectStart.x, coords.x);
+            const y = Math.min(rectStart.y, coords.y);
+            const w = Math.abs(coords.x - rectStart.x);
+            const h = Math.abs(coords.y - rectStart.y);
+            ctx.clearRect(x, y, w, h);
             setHasChanges(true);
           }
         }
         setRectStart(null);
+        // Save final state after rectangle operation
+        saveState();
+      } else if (isDrawing) {
+        // Save final state after brush stroke completes
+        saveState();
       }
       setIsDrawing(false);
     },
-    [tool, rectStart, getCanvasCoords]
+    [tool, rectStart, getCanvasCoords, isDrawing, saveState]
   );
 
-  // Clear mask (all white = fully protected, nothing editable)
-  const handleClear = useCallback(() => {
+  // Protect All - fill with black (AI won't edit anything)
+  const handleProtectAll = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
@@ -296,14 +316,13 @@ export function MaskCanvas({
     if (!ctx) return;
 
     saveState();
-    ctx.globalCompositeOperation = "source-over";
-    ctx.fillStyle = "rgba(255, 255, 255, 1)";
+    ctx.fillStyle = "#000000";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     setHasChanges(true);
   }, [saveState]);
 
-  // Fill mask (all transparent = everything editable)
-  const handleFillAll = useCallback(() => {
+  // Edit All - clear to transparent (AI will edit everything)
+  const handleEditAll = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
@@ -311,7 +330,6 @@ export function MaskCanvas({
     if (!ctx) return;
 
     saveState();
-    ctx.globalCompositeOperation = "source-over";
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     setHasChanges(true);
   }, [saveState]);
@@ -326,13 +344,11 @@ export function MaskCanvas({
     setHasChanges(false);
   }, [onSave]);
 
-  // Handle undo with state update
   const handleUndo = useCallback(() => {
     undo();
     setHasChanges(true);
   }, [undo]);
 
-  // Handle redo with state update
   const handleRedo = useCallback(() => {
     redo();
     setHasChanges(true);
@@ -342,34 +358,34 @@ export function MaskCanvas({
     <div className="space-y-4" ref={containerRef} tabIndex={-1}>
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-2">
-        {/* Tools */}
+        {/* Brush Tools */}
         <div className="flex items-center gap-1">
           <Button
-            variant={tool === "select" ? "default" : "outline"}
+            variant={tool === "edit" ? "default" : "outline"}
             size="sm"
-            onClick={() => setTool("select")}
-            title="Select regions for AI to edit"
+            onClick={() => setTool("edit")}
+            title="Paint areas for AI to edit (erases protection)"
           >
             <Paintbrush className="h-4 w-4 mr-1" />
-            Select
+            Edit Brush
           </Button>
           <Button
-            variant={tool === "deselect" ? "default" : "outline"}
+            variant={tool === "keep" ? "default" : "outline"}
             size="sm"
-            onClick={() => setTool("deselect")}
-            title="Protect regions from AI editing"
+            onClick={() => setTool("keep")}
+            title="Paint areas to keep unchanged (adds protection)"
           >
-            <Eraser className="h-4 w-4 mr-1" />
-            Protect
+            <Shield className="h-4 w-4 mr-1" />
+            Keep Brush
           </Button>
           <Button
             variant={tool === "rectangle" ? "default" : "outline"}
             size="sm"
             onClick={() => setTool("rectangle")}
-            title="Draw rectangular selection"
+            title="Draw rectangle area for AI to edit"
           >
             <Square className="h-4 w-4 mr-1" />
-            Rectangle
+            Edit Rect
           </Button>
         </div>
 
@@ -415,112 +431,115 @@ export function MaskCanvas({
 
         <Separator orientation="vertical" className="h-6" />
 
-        {/* Canvas operations */}
+        {/* Fill Operations */}
         <div className="flex items-center gap-1">
           <Button
             variant="outline"
             size="sm"
-            onClick={handleClear}
-            title="Clear all selections (protect everything)"
+            onClick={handleProtectAll}
+            title="Keep everything - fill with protection"
           >
-            <Trash2 className="h-4 w-4 mr-1" />
-            Clear
+            <Shield className="h-4 w-4 mr-1" />
+            Keep All
           </Button>
           <Button
             variant="outline"
             size="sm"
-            onClick={handleFillAll}
-            title="Select everything for editing"
+            onClick={handleEditAll}
+            title="Edit everything - remove all protection"
           >
-            <Grid3X3 className="h-4 w-4 mr-1" />
-            Select All
+            <Maximize2 className="h-4 w-4 mr-1" />
+            Edit All
           </Button>
+        </div>
+
+        <Separator orientation="vertical" className="h-6" />
+
+        {/* Demo & Save */}
+        <div className="flex items-center gap-1">
           {onLoadDemoMask && (
             <Button variant="outline" size="sm" onClick={handleLoadDemoMask}>
               Load Demo
             </Button>
           )}
-        </div>
-
-        {/* Save button */}
-        <div className="ml-auto">
           <Button
             onClick={handleSave}
             disabled={!hasChanges}
-            className="min-w-[100px]"
+            className="min-w-24"
           >
             Save Mask
           </Button>
         </div>
       </div>
 
-      {/* Canvas container */}
-      <div
-        className="relative border border-border rounded-lg overflow-hidden"
-        style={{
-          width,
-          height,
-          background: "repeating-conic-gradient(#374151 0% 25%, #1f2937 0% 50%) 50% / 20px 20px"
-        }}
-      >
-        {/* Base image layer */}
-        {baseImageUrl && (
-          <img
-            src={baseImageUrl}
-            alt="Base"
-            className="absolute inset-0 w-full h-full object-contain"
-            style={{ pointerEvents: "none" }}
-          />
-        )}
-
-        {/* Mask canvas - red tint shows protected areas */}
-        <canvas
-          ref={canvasRef}
-          className="absolute inset-0"
+      {/* Canvas container - CENTERED */}
+      <div className="flex justify-center">
+        <div
+          className="relative border border-border rounded-lg overflow-hidden"
           style={{
-            mixBlendMode: "multiply",
-            opacity: 0.4,
-            pointerEvents: "none",
+            width,
+            height,
+            background: "repeating-conic-gradient(#374151 0% 25%, #1f2937 0% 50%) 50% / 20px 20px"
           }}
-        />
+        >
+          {/* Base image layer */}
+          {baseImageUrl && (
+            <img
+              src={baseImageUrl}
+              alt="Base"
+              className="absolute inset-0 w-full h-full object-contain"
+              style={{ pointerEvents: "none" }}
+            />
+          )}
 
-        {/* Interactive overlay canvas */}
-        <canvas
-          ref={overlayRef}
-          className="absolute inset-0 cursor-crosshair"
-          onMouseDown={handleMouseDown}
-          onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp}
-          onMouseLeave={() => {
-            setIsDrawing(false);
-            if (rectStart) {
+          {/* Mask canvas - white areas shown as overlay */}
+          <canvas
+            ref={canvasRef}
+            className="absolute inset-0"
+            style={{
+              opacity: 0.4,
+              pointerEvents: "none",
+            }}
+          />
+
+          {/* Interactive overlay canvas */}
+          <canvas
+            ref={overlayRef}
+            className="absolute inset-0 cursor-crosshair"
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={() => {
+              setIsDrawing(false);
               const overlay = overlayRef.current;
               if (overlay) {
                 const ctx = overlay.getContext("2d");
                 ctx?.clearRect(0, 0, overlay.width, overlay.height);
               }
-            }
-            setRectStart(null);
-          }}
-        />
+              setRectStart(null);
+            }}
+          />
 
-        {/* Placeholder when no base image */}
-        {!baseImageUrl && (
-          <div className="absolute inset-0 flex items-center justify-center text-muted-foreground">
-            Upload a base image first
-          </div>
-        )}
+          {/* Placeholder when no base image */}
+          {!baseImageUrl && (
+            <div className="absolute inset-0 flex items-center justify-center text-muted-foreground">
+              Upload a base image first
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Help text */}
-      <div className="text-sm text-muted-foreground space-y-1">
+      <div className="text-sm text-muted-foreground space-y-1 text-center">
         <p>
-          <strong>Select</strong> = mark regions for AI to edit (shows through).{" "}
-          <strong>Protect</strong> = keep regions unchanged (tinted).
+          <span className="inline-block w-3 h-3 bg-black/40 border border-border rounded mr-1 align-middle"></span>
+          <strong>Dark overlay</strong> = Protected (AI keeps this).{" "}
+          <span className="inline-block w-3 h-3 bg-transparent border border-border rounded mr-1 align-middle"></span>
+          <strong>Clear</strong> = AI will edit this.
         </p>
         <p className="text-xs">
-          Tip: Use <kbd className="px-1 py-0.5 bg-muted rounded text-xs">Ctrl+Z</kbd> to undo,{" "}
-          <kbd className="px-1 py-0.5 bg-muted rounded text-xs">Ctrl+Shift+Z</kbd> to redo.
+          <kbd className="px-1 py-0.5 bg-muted rounded text-xs">Ctrl+Z</kbd> undo |{" "}
+          <kbd className="px-1 py-0.5 bg-muted rounded text-xs">Ctrl+Shift+Z</kbd> redo
         </p>
       </div>
     </div>

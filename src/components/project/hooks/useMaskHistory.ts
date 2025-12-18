@@ -1,22 +1,34 @@
 import { useCallback, useRef, useState } from "react";
 
-const MAX_HISTORY_SIZE = 50;
+const MAX_HISTORY_SIZE = 30;
 
 /**
  * useMaskHistory Hook
  *
- * Single Responsibility: Manage undo/redo history for canvas operations.
- * Stores canvas ImageData snapshots for efficient memory usage.
+ * Simple undo/redo history for canvas operations.
+ *
+ * Model: Save state BEFORE each operation. First save becomes the baseline.
+ * - Position 0: State before first operation (baseline)
+ * - Position 1: State before second operation (after first completed)
+ * - etc.
+ *
+ * Undo goes back to previous saved state.
+ * Redo goes forward to next saved state.
  */
 export function useMaskHistory(canvasRef: React.RefObject<HTMLCanvasElement | null>) {
   const historyRef = useRef<ImageData[]>([]);
-  const historyIndexRef = useRef(-1);
+  const positionRef = useRef(-1);
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
 
+  const updateButtonState = useCallback(() => {
+    setCanUndo(positionRef.current > 0);
+    setCanRedo(positionRef.current < historyRef.current.length - 1);
+  }, []);
+
   /**
-   * Save current canvas state to history
-   * Call this BEFORE making any changes
+   * Save current canvas state to history.
+   * Call this BEFORE making any changes.
    */
   const saveState = useCallback(() => {
     const canvas = canvasRef.current;
@@ -27,75 +39,75 @@ export function useMaskHistory(canvasRef: React.RefObject<HTMLCanvasElement | nu
 
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
-    // Truncate any "future" history if we're not at the end
-    historyRef.current = historyRef.current.slice(0, historyIndexRef.current + 1);
+    // Truncate any future history if we're not at the end
+    if (positionRef.current < historyRef.current.length - 1) {
+      historyRef.current = historyRef.current.slice(0, positionRef.current + 1);
+    }
 
     // Add new state
     historyRef.current.push(imageData);
+    positionRef.current = historyRef.current.length - 1;
 
-    // Limit history size
-    if (historyRef.current.length > MAX_HISTORY_SIZE) {
+    // Enforce max size
+    while (historyRef.current.length > MAX_HISTORY_SIZE) {
       historyRef.current.shift();
-    } else {
-      historyIndexRef.current++;
+      positionRef.current = Math.max(0, positionRef.current - 1);
     }
 
-    setCanUndo(historyIndexRef.current > 0);
-    setCanRedo(false);
-  }, [canvasRef]);
+    updateButtonState();
+  }, [canvasRef, updateButtonState]);
 
   /**
-   * Undo last operation
+   * Undo - restore previous state
    */
   const undo = useCallback(() => {
     const canvas = canvasRef.current;
-    if (!canvas || historyIndexRef.current <= 0) return;
+    if (!canvas || positionRef.current <= 0) return;
 
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    historyIndexRef.current--;
-    const imageData = historyRef.current[historyIndexRef.current];
+    positionRef.current--;
+    const imageData = historyRef.current[positionRef.current];
     if (imageData) {
       ctx.putImageData(imageData, 0, 0);
     }
 
-    setCanUndo(historyIndexRef.current > 0);
-    setCanRedo(true);
-  }, [canvasRef]);
+    updateButtonState();
+  }, [canvasRef, updateButtonState]);
 
   /**
-   * Redo previously undone operation
+   * Redo - restore next state
    */
   const redo = useCallback(() => {
     const canvas = canvasRef.current;
-    if (!canvas || historyIndexRef.current >= historyRef.current.length - 1) return;
+    if (!canvas || positionRef.current >= historyRef.current.length - 1) return;
 
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    historyIndexRef.current++;
-    const imageData = historyRef.current[historyIndexRef.current];
+    positionRef.current++;
+    const imageData = historyRef.current[positionRef.current];
     if (imageData) {
       ctx.putImageData(imageData, 0, 0);
     }
 
-    setCanUndo(true);
-    setCanRedo(historyIndexRef.current < historyRef.current.length - 1);
-  }, [canvasRef]);
+    updateButtonState();
+  }, [canvasRef, updateButtonState]);
 
   /**
-   * Clear all history (call when canvas is reset)
+   * Clear all history
    */
   const clearHistory = useCallback(() => {
     historyRef.current = [];
-    historyIndexRef.current = -1;
+    positionRef.current = -1;
     setCanUndo(false);
     setCanRedo(false);
   }, []);
 
   /**
-   * Initialize history with current state
+   * Initialize history with current canvas state as baseline.
+   * Call after canvas is fully set up with initial content.
    */
   const initHistory = useCallback(() => {
     const canvas = canvasRef.current;
@@ -106,7 +118,7 @@ export function useMaskHistory(canvasRef: React.RefObject<HTMLCanvasElement | nu
 
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
     historyRef.current = [imageData];
-    historyIndexRef.current = 0;
+    positionRef.current = 0;
     setCanUndo(false);
     setCanRedo(false);
   }, [canvasRef]);
