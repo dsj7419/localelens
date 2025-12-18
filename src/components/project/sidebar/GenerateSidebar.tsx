@@ -3,13 +3,13 @@
 import { Button } from "~/components/ui/button";
 import { Badge } from "~/components/ui/badge";
 import { Separator } from "~/components/ui/separator";
-import { Progress } from "~/components/ui/progress";
 import { Sparkles, PlayCircle, Check } from "lucide-react";
 import {
   SUPPORTED_LOCALES,
   LOCALE_REGISTRY,
   type LocaleId,
 } from "~/server/domain/value-objects/locale";
+import { GenerationProgress } from "../GenerationProgress";
 
 interface GenerateSidebarProps {
   selectedLocales: LocaleId[];
@@ -22,6 +22,7 @@ interface GenerateSidebarProps {
   onClearAll: () => void;
   onGenerate: () => void;
   onDemoMode?: () => void;
+  onCurrentLocaleChange?: (locale: LocaleId | null) => void;
 }
 
 /**
@@ -40,6 +41,7 @@ export function GenerateSidebar({
   onClearAll,
   onGenerate,
   onDemoMode,
+  onCurrentLocaleChange,
 }: GenerateSidebarProps) {
   const allSelected = selectedLocales.length === SUPPORTED_LOCALES.length;
   const noneSelected = selectedLocales.length === 0;
@@ -131,17 +133,14 @@ export function GenerateSidebar({
 
         <Separator />
 
-        {/* Generation Status */}
-        {isGenerating && (
-          <div className="space-y-3">
-            <div className="flex items-center gap-2 text-sm">
-              <div className="animate-spin h-4 w-4 border-2 border-primary border-t-transparent rounded-full" />
-              <span>
-                {isDemoMode ? "Loading demo outputs..." : "Generating variants..."}
-              </span>
-            </div>
-            <Progress value={progress} className="h-1.5" />
-          </div>
+        {/* Generation Progress */}
+        {(isGenerating || progress === 100) && (
+          <GenerationProgress
+            locales={selectedLocales}
+            isGenerating={isGenerating}
+            isDemoMode={isDemoMode}
+            onCurrentLocaleChange={onCurrentLocaleChange}
+          />
         )}
       </div>
 

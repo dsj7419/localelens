@@ -9,3 +9,4 @@ export { useProjectMutations } from "./useProjectMutations";
 export { useMaskEditor } from "./useMaskEditor";
 export { useWorkflow } from "./useWorkflow";
 export { useResultsState } from "./useResultsState";
+export { useKeyboardShortcuts, getToolShortcut, SHORTCUTS } from "./useKeyboardShortcuts";

@@ -11,6 +11,8 @@ interface ToolButtonProps {
   icon: React.ReactNode;
   label: string;
   tooltip?: string;
+  /** Keyboard shortcut to display */
+  shortcut?: string;
   isActive?: boolean;
   disabled?: boolean;
   variant?: "default" | "primary" | "destructive";
@@ -22,12 +24,13 @@ interface ToolButtonProps {
  * ToolButton Component
  *
  * Icon button with tooltip for toolbars.
- * Supports active state and variants.
+ * Supports active state, variants, and keyboard shortcut display.
  */
 export function ToolButton({
   icon,
   label,
   tooltip,
+  shortcut,
   isActive = false,
   disabled = false,
   variant = "default",
@@ -39,10 +42,10 @@ export function ToolButton({
       onClick={onClick}
       disabled={disabled}
       className={cn(
-        "flex items-center justify-center h-9 w-9 rounded-lg transition-all",
+        "relative flex items-center justify-center h-9 w-9 rounded-lg transition-all duration-200",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         variant === "default" && !isActive && "hover:bg-accent text-muted-foreground hover:text-foreground",
-        variant === "default" && isActive && "bg-primary text-primary-foreground",
+        variant === "default" && isActive && "bg-primary text-primary-foreground shadow-md",
         variant === "primary" && "bg-primary text-primary-foreground hover:bg-primary/90",
         variant === "destructive" && "bg-destructive text-destructive-foreground hover:bg-destructive/90",
         disabled && "opacity-50 cursor-not-allowed",
@@ -51,6 +54,12 @@ export function ToolButton({
       aria-label={label}
     >
       {icon}
+      {/* Shortcut badge */}
+      {shortcut && !isActive && (
+        <span className="absolute -bottom-0.5 -right-0.5 text-[8px] font-mono font-bold bg-muted text-muted-foreground rounded px-0.5 leading-tight">
+          {shortcut}
+        </span>
+      )}
     </button>
   );
 
@@ -59,7 +68,14 @@ export function ToolButton({
       <Tooltip>
         <TooltipTrigger asChild>{button}</TooltipTrigger>
         <TooltipContent side="right" sideOffset={8}>
-          <p>{tooltip}</p>
+          <p className="flex items-center gap-2">
+            {tooltip}
+            {shortcut && (
+              <kbd className="text-[10px] font-mono bg-muted px-1 py-0.5 rounded border">
+                {shortcut}
+              </kbd>
+            )}
+          </p>
         </TooltipContent>
       </Tooltip>
     );

@@ -14,14 +14,16 @@
 | Sprint 2 | **COMPLETE** | 2025-12-17 |
 | Sprint 3 | **COMPLETE** | 2025-12-17 |
 | Sprint 4 | **COMPLETE** | 2025-12-18 |
-| Sprint 5 | **PENDING** | - |
+| Sprint 5 | **COMPLETE** | 2025-12-18 |
+| Sprint 6 | **CRITICAL - IN PROGRESS** | 2025-12-18 |
 
 **Current State:**
 - Core functionality complete and working
 - SOLID/SRP architecture refactoring complete
 - OpenAI Image Edit API integration verified working (gpt-image-1.5)
 - Demo Mode allows full UX testing without API access
-- **Pending:** Visual polish sprint (animations, loading states, glass morphism) for contest-winning presentation
+- Visual polish complete (Sprint 5)
+- **CRITICAL ISSUE:** Drift detection failing at 14.5% - API optimization needed (Sprint 6)
 
 ---
 
@@ -395,85 +397,171 @@ Refactor the codebase to achieve full SOLID/SRP compliance, making it maintainab
 
 ## 7) Sprint 5 — Visual Polish (Contest-Winning Presentation)
 
-> **STATUS: PENDING**
+> **STATUS: COMPLETE** (2025-12-18)
 
 ### 7.1 Sprint goal
 
 Transform the functional UI into a visually impressive, contest-winning presentation that creates immediate "wow factor" for judges.
 
-### 7.2 Scope (must ship)
+### 7.2 Scope (completed)
 
-1) **Glass Morphism Styling**
-   - Frosted glass effect on sidebar
-   - Subtle backdrop blur on modals/overlays
-   - Modern, premium aesthetic
+1) **Glass Morphism Styling** ✅
+   - Frosted glass effect on sidebar (`backdrop-blur-xl bg-background/80`)
+   - Subtle gradient background on canvas area
+   - Glass utility classes added to globals.css
 
-2) **Animations & Transitions**
-   - Step transitions (fade/slide between workflow steps)
-   - Tool selection feedback
-   - Progress indicator animations
-   - Canvas state transitions
+2) **Animations & Transitions** ✅
+   - Step transitions with fade-in animations
+   - Enhanced StepProgress component with animated connectors
+   - Active step glow effect with ring indicator
+   - Smooth tool button transitions
 
-3) **Loading States**
-   - Skeleton loaders for images
-   - Progress bar during generation (not just spinner)
-   - Estimated time remaining during generation
-   - Per-locale progress indicators
+3) **Loading States** ✅
+   - `GenerationProgress` component with per-locale status tracking
+   - Progress bar with estimated time remaining
+   - Status icons per locale (pending → generating → complete → failed)
+   - Canvas overlay showing current locale being generated
+   - RTL badge for Arabic locale
 
-4) **Empty States**
-   - Designed empty state illustrations
-   - Helpful guidance text
-   - Clear call-to-action buttons
+4) **Error Handling** ✅
+   - `ErrorBoundary` component with graceful fallback UI
+   - Collapsible technical details
+   - Retry and Go Home buttons
+   - Project layout wrapper with error boundary
 
-5) **Error Handling**
-   - Error boundary with graceful fallback
-   - User-friendly error messages
-   - Retry options for failed operations
+5) **Keyboard Shortcuts** ✅
+   - `useKeyboardShortcuts` hook for mask editing
+   - Ctrl+Z/Cmd+Z for undo
+   - Ctrl+Y/Cmd+Shift+Z for redo
+   - B for Edit Brush, R for Rectangle, E for Ellipse, X for Keep Brush
+   - Ctrl+S to save mask
+   - Shortcut badges displayed on tool buttons
+   - Shortcuts shown in tooltips
 
-6) **Keyboard Shortcuts**
-   - Ctrl+Z/Y for undo/redo (with visual indicator)
-   - B/R/E for brush/rectangle/ellipse tools
-   - Number keys for quick locale selection
+### 7.3 Deliverables
 
-7) **Responsive Considerations**
-   - Minimum supported width (1024px)
-   - Graceful degradation message for mobile
+- `src/components/project/GenerationProgress.tsx` — Per-locale progress component
+- `src/components/ErrorBoundary.tsx` — Error boundary with recovery UI
+- `src/hooks/useKeyboardShortcuts.ts` — Keyboard event handling
+- `src/app/project/[id]/layout.tsx` — Error boundary wrapper
+- Updated `src/styles/globals.css` — Glass morphism utilities
+- Updated `src/components/project/StepProgress.tsx` — Enhanced animations
+- Updated `src/components/project/ToolButton.tsx` — Shortcut display
+- Updated `src/components/project/sidebar/MaskSidebar.tsx` — Shortcut hints
+- Updated `src/components/project/sidebar/GenerateSidebar.tsx` — Progress integration
+- Updated `src/components/project/steps/GenerateStep.tsx` — Generation overlay
 
-### 7.3 Acceptance criteria
+### 7.4 Acceptance criteria (met)
 
-- [ ] First impression is visually impressive (not just functional)
-- [ ] Animations are smooth and purposeful
-- [ ] Loading states provide meaningful feedback
-- [ ] No jarring transitions or layout shifts
-
-### 7.4 Priority order
-
-1. Loading states during generation (most impactful for demo)
-2. Glass morphism on sidebar (premium feel)
-3. Step transitions (professional workflow)
-4. Error handling (robustness)
-5. Keyboard shortcuts (power users)
+- ✅ First impression is visually impressive (not just functional)
+- ✅ Animations are smooth and purposeful
+- ✅ Loading states provide meaningful feedback
+- ✅ No jarring transitions or layout shifts
+- ✅ Keyboard shortcuts functional with visual indicators
 
 ---
 
-## 8) Sprint 6 (Optional) — Bonus Features
+## 8) Sprint 6 — CRITICAL: OpenAI API Optimization & Drift Fix
 
-### 8.1 Candidate features
+> **STATUS: IN PROGRESS** (2025-12-18)
+> **PRIORITY: HIGHEST - BLOCKING CONTEST SUBMISSION**
+
+### 8.1 Sprint goal
+
+Fix the critical drift issue (currently 14.5% - FAILING) by optimizing OpenAI Image Edit API usage. The entire point of this contest is to showcase expert use of the gpt-image-1.5 API.
+
+### 8.2 Current Problems
+
+1) **Drift Score Failing** — 14.5% drift outside mask (threshold is likely 5-10%)
+   - Generated images are not preserving areas outside the mask
+   - Images appear vertically compressed (top-to-bottom distortion)
+   - UI elements like buttons are being modified when they shouldn't be
+   - The AI is making changes beyond just the text in the masked region
+
+2) **API Parameters Not Optimized** — Current implementation uses minimal parameters:
+   - No `input_fidelity` parameter (critical for preserving original image features)
+   - No explicit `quality` setting
+   - May not be using optimal `size` for the input images
+
+3) **Prompts May Need Hardening** — Current prompts may not be strict enough about:
+   - Preserving exact pixel fidelity outside masked regions
+   - Preventing any modifications to non-text elements
+   - Maintaining original image dimensions and proportions
+
+### 8.3 Scope (must ship)
+
+1) **API Parameter Optimization**
+   - Add `input_fidelity: "high"` to gpt-image-1 calls (preserves style/features)
+   - Set explicit `quality: "high"` for maximum fidelity
+   - Verify `size` matches input image dimensions exactly
+   - Consider `background: "opaque"` to prevent transparency issues
+
+2) **Prompt Engineering Hardening**
+   - Review and strengthen prompts in `localePlan.service.ts`
+   - Add explicit constraints: "DO NOT modify ANY pixels outside the masked region"
+   - Add constraints about maintaining exact image dimensions
+   - Add constraints about preserving UI elements (buttons, icons, etc.)
+
+3) **Image Processing Review**
+   - Verify mask format is correct for OpenAI API (transparent = edit, opaque = preserve)
+   - Check if image resizing is causing distortion
+   - Ensure aspect ratio is preserved throughout pipeline
+
+4) **Drift Threshold Tuning**
+   - Review drift calculation in `diffService.ts`
+   - Ensure threshold is appropriate for the use case
+   - Consider if pixel comparison methodology is correct
+
+### 8.4 Key Files to Review/Modify
+
+- `src/server/services/openaiImage.ts` — API call parameters
+- `src/server/domain/services/localePlan.service.ts` — Prompt templates
+- `src/server/domain/services/variantGeneration.service.ts` — Generation pipeline
+- `src/server/services/diffService.ts` — Drift calculation
+- `src/server/services/fileStore.ts` — Image handling
+
+### 8.5 Acceptance criteria
+
+- [ ] Drift score ≤ 5% for all three locales (es-MX, fr-CA, ar)
+- [ ] Generated images maintain exact dimensions of original
+- [ ] Non-masked areas are pixel-perfect or near-perfect
+- [ ] UI elements (buttons, icons) are unchanged
+- [ ] Only text within masked regions is modified
+
+### 8.6 OpenAI API Reference (Critical Parameters)
+
+From the official API documentation:
+
+**For `images.edit` endpoint:**
+- `input_fidelity`: "high" | "low" — Controls style/feature matching (USE HIGH!)
+- `quality`: "high" | "medium" | "low" — Image quality level
+- `size`: "1024x1024" | "1536x1024" | "1024x1536" | "auto"
+- `background`: "transparent" | "opaque" | "auto"
+
+**Mask format:**
+- Transparent areas (alpha=0) = regions to edit
+- Opaque areas (alpha=255) = regions to preserve
+
+---
+
+## 9) Sprint 7 (Optional) — Bonus Features
+
+### 9.1 Candidate features
 
 - Mask region "suggestions" (semi-automatic bounding boxes)
 - Batch mode: multiple images, same locales
 - Preset templates (App Store, Poster, Banner)
 - "Compact copy" auto-variants for German/long text languages
 
-### 8.2 Rule
+### 9.2 Rule
 
-Only execute Sprint 6 if Sprints 0–5 are fully complete and stable.
+Only execute Sprint 7 if Sprints 0–6 are fully complete and stable.
 
 ---
 
-## 9) Engineering Quality Standards (applies to all sprints)
+## 10) Engineering Quality Standards (applies to all sprints)
 
-### 9.1 Code standards
+### 10.1 Code standards
 
 - Strict TypeScript, no `any` in core services
 - Deterministic file naming
@@ -483,7 +571,7 @@ Only execute Sprint 6 if Sprints 0–5 are fully complete and stable.
   - services
   - storage layer
 
-### 9.2 Testing
+### 10.2 Testing
 
 - Unit tests where high-value:
   - drift scoring correctness
@@ -492,7 +580,7 @@ Only execute Sprint 6 if Sprints 0–5 are fully complete and stable.
 - Manual tests:
   - end-to-end demo script
 
-### 9.3 Logging
+### 10.3 Logging
 
 - Server logs must include:
   - projectId
@@ -503,7 +591,7 @@ Only execute Sprint 6 if Sprints 0–5 are fully complete and stable.
 
 ---
 
-## 10) Definition of "1st Prize" Readiness
+## 11) Definition of "1st Prize" Readiness
 
 LocaleLens is “1st prize ready” when:
 

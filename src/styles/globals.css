@@ -126,3 +126,62 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Glass Morphism Utilities */
+@layer utilities {
+  .glass {
+    background: oklch(from var(--background) l c h / 0.7);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+
+  .glass-subtle {
+    background: oklch(from var(--background) l c h / 0.85);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+
+  .glass-border {
+    border: 1px solid oklch(from var(--border) l c h / 0.4);
+  }
+
+  /* Gradient glow effect */
+  .glow-primary {
+    box-shadow: 0 0 20px -5px oklch(from var(--primary) l c h / 0.3);
+  }
+
+  /* Smooth fade transition for step changes */
+  .step-transition {
+    animation: stepFadeIn 0.3s ease-out;
+  }
+
+  @keyframes stepFadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* Pulse animation for generating state */
+  .generating-pulse {
+    animation: generatingPulse 2s ease-in-out infinite;
+  }
+
+  @keyframes generatingPulse {
+    0%, 100% {
+      opacity: 0.3;
+    }
+    50% {
+      opacity: 0.6;
+    }
+  }
+
+  /* Smooth scroll for sidebar */
+  .smooth-scroll {
+    scroll-behavior: smooth;
+  }
+}

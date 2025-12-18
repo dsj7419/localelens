@@ -76,14 +76,16 @@ export function MaskSidebar({
           <ToolButton
             icon={<Paintbrush className="h-4 w-4" />}
             label="Edit Brush"
-            tooltip="Paint areas for AI to edit"
+            tooltip="Paint areas for AI to edit (B)"
+            shortcut="B"
             isActive={activeTool === "edit-brush"}
             onClick={() => onToolChange("edit-brush")}
           />
           <ToolButton
             icon={<Shield className="h-4 w-4" />}
             label="Keep Brush"
-            tooltip="Paint areas to keep unchanged"
+            tooltip="Paint areas to keep unchanged (X)"
+            shortcut="X"
             isActive={activeTool === "keep-brush"}
             onClick={() => onToolChange("keep-brush")}
           />
@@ -94,7 +96,8 @@ export function MaskSidebar({
           <ToolButton
             icon={<Square className="h-4 w-4" />}
             label="Edit Rectangle"
-            tooltip="Draw rectangle area to edit"
+            tooltip="Draw rectangle area to edit (R)"
+            shortcut="R"
             isActive={activeTool === "edit-rect"}
             onClick={() => onToolChange("edit-rect")}
           />
@@ -113,7 +116,8 @@ export function MaskSidebar({
           <ToolButton
             icon={<Circle className="h-4 w-4" />}
             label="Edit Ellipse"
-            tooltip="Draw ellipse area to edit"
+            tooltip="Draw ellipse area to edit (E)"
+            shortcut="E"
             isActive={activeTool === "edit-ellipse"}
             onClick={() => onToolChange("edit-ellipse")}
           />

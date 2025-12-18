@@ -33,6 +33,7 @@ import {
   useMaskEditor,
   useWorkflow,
   useResultsState,
+  useKeyboardShortcuts,
 } from "~/hooks";
 import { SUPPORTED_LOCALES, type LocaleId } from "~/server/domain/value-objects/locale";
 
@@ -72,6 +73,7 @@ export default function ProjectPage() {
   const [selectedLocales, setSelectedLocales] = useState<LocaleId[]>([...SUPPORTED_LOCALES]);
   const [generationProgress, setGenerationProgress] = useState(0);
   const [isDemoMode, setIsDemoMode] = useState(false);
+  const [currentGeneratingLocale, setCurrentGeneratingLocale] = useState<LocaleId | null>(null);
 
   // ─────────────────────────────────────────────────────────────────────────────
   // Mutations
@@ -98,6 +100,19 @@ export default function ProjectPage() {
     onGenerationError: () => {
       setGenerationProgress(0);
     },
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Keyboard Shortcuts
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  useKeyboardShortcuts({
+    currentStep: workflow.currentStep,
+    onUndo: maskEditor.undo,
+    onRedo: maskEditor.redo,
+    onToolChange: maskEditor.setActiveTool,
+    onSave: () => mutations.handleSaveMask(() => maskEditor.save()),
+    enabled: !mutations.isGenerating,
   });
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -235,6 +250,7 @@ export default function ProjectPage() {
             onClearAll={() => setSelectedLocales([])}
             onGenerate={handleGenerate}
             onDemoMode={handleDemoMode}
+            onCurrentLocaleChange={setCurrentGeneratingLocale}
           />
         );
 
@@ -292,6 +308,8 @@ export default function ProjectPage() {
             selectedLocales={selectedLocales}
             canvasWidth={CANVAS_WIDTH}
             canvasHeight={CANVAS_HEIGHT}
+            isGenerating={mutations.isGenerating}
+            currentLocale={currentGeneratingLocale}
           />
         );
 
@@ -347,16 +365,18 @@ export default function ProjectPage() {
 
       {/* Main Content */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Sidebar */}
-        <aside className="w-72 shrink-0 border-r border-border bg-background">
+        {/* Sidebar with Glass Morphism */}
+        <aside className="w-72 shrink-0 border-r border-border/40 bg-background/80 backdrop-blur-xl">
           <ScrollArea className="h-full">
             <div className="p-4">{renderSidebar()}</div>
           </ScrollArea>
         </aside>
 
-        {/* Canvas Area */}
-        <main className="flex-1 bg-muted/10 overflow-auto">
-          {renderCanvas()}
+        {/* Canvas Area with Subtle Gradient */}
+        <main className="flex-1 overflow-auto bg-linear-to-br from-muted/20 via-background to-muted/30">
+          <div className="step-transition">
+            {renderCanvas()}
+          </div>
         </main>
       </div>
     </div>
