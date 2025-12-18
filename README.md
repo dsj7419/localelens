@@ -1,130 +1,218 @@
 # LocaleLens
 
-> AI-Powered Marketing Localization Tool
+**Localize text inside real marketing images—with automatic drift detection.**
 
-LocaleLens is a local-first workflow tool that takes a base marketing visual, lets you mark text regions with a mask, then generates **layout-safe localized variants** using OpenAI's Image Gen API—while automatically measuring visual drift.
+LocaleLens uses OpenAI's Image Generation API to replace text regions in app store screenshots and marketing visuals while preserving the original design. It automatically detects unintended changes outside the masked area, flags quality issues, and exports production-ready assets.
 
-Built for the OpenAI Image Gen API Contest
+Built for the [OpenAI Image Generation API Contest](https://openai.com/).
 
 ---
 
-## Current Status
+## Demo (< 60 seconds)
 
-| Sprint | Status | Description |
-|--------|--------|-------------|
-| Sprint 0 | Complete | Foundation + OpenAI service |
-| Sprint 1 | Complete | Mask editor + variant generation |
-| Sprint 2 | Pending | Drift Inspector + RTL polish |
-| Sprint 3 | Pending | README gallery + submission polish |
+<!-- TODO: Replace with actual GIF once API access is verified -->
+![Demo Flow Placeholder](docs/screenshots/demo-flow-placeholder.png)
+
+1. **Load Demo Project** — Pre-configured with a sample App Store screenshot
+2. **View Mask** — Text regions are already marked for replacement
+3. **Generate Variants** — Creates Spanish, French, and Arabic versions
+4. **Inspect Drift** — See exactly what changed outside the mask
+5. **Export** — Download ZIP bundle or 2×2 comparison montage
+
+> **No API key?** Click "Demo Mode" to see pre-generated outputs with full drift analysis.
+
+---
+
+## Key Features
+
+| Feature | Description |
+|---------|-------------|
+| **Mask Editor** | Paint text regions with brush/rectangle tools. Transparent areas get replaced. |
+| **Multi-Locale** | Spanish (es-MX), French (fr-CA), Arabic (ar) with RTL support |
+| **Drift Inspector** | Pixel-level diff detects changes outside the mask. PASS/WARN/FAIL thresholds. |
+| **Heatmap Overlay** | Visual highlighting of unintended modifications |
+| **Regenerate** | One-click retry with stricter constraints for failed variants |
+| **Demo Mode** | Full UX works offline using committed demo outputs |
+| **Export Suite** | Per-locale PNG, ZIP bundle, 2×2 montage grid |
+
+---
+
+## How It Works
+
+```
+┌─────────────┐      ┌─────────────┐      ┌─────────────┐      ┌─────────────┐
+│  1. UPLOAD  │ ──▶  │  2. MASK    │ ──▶  │  3. GENERATE│ ──▶  │  4. INSPECT │
+│             │      │             │      │             │      │             │
+│ Base image  │      │ Paint text  │      │ OpenAI API  │      │ Drift score │
+│ (1080×1920) │      │ regions     │      │ per locale  │      │ + heatmap   │
+└─────────────┘      └─────────────┘      └─────────────┘      └─────────────┘
+```
+
+**Drift Detection:** After generation, LocaleLens compares each variant against the original *outside* the masked region. Changes above 2% trigger warnings; above 5% trigger failures with automatic regeneration options.
 
 ---
 
 ## Quick Start
 
 ```bash
-# Clone and install
-git clone <repo-url>
+git clone https://github.com/YOUR_USERNAME/localelens.git
 cd localelens
-pnpm install
+pnpm install && pnpm db:push && pnpm dev
+```
 
-# Configure environment
-cp .env.example .env
-# Add your OPENAI_API_KEY to .env
+Open [http://localhost:3000](http://localhost:3000)
 
-# Initialize database
-pnpm db:push
+### First Run Checklist
 
-# Start development server
+- [ ] Copy `.env.example` to `.env`
+- [ ] Add your `OPENAI_API_KEY` (or use Demo Mode without one)
+- [ ] Run `pnpm db:push` to initialize SQLite database
+
+---
+
+## Demo Mode (No API Key Required)
+
+LocaleLens includes pre-generated outputs so judges and reviewers can experience the full workflow without API access.
+
+```bash
+# Seed demo assets and open the app
+pnpm demo:seed
 pnpm dev
 ```
 
-Open <http://localhost:3000>
+Then:
+1. Click **"Try Demo Project"**
+2. Navigate to **Generate** tab
+3. Click **"Demo Mode"** instead of "Generate Variants"
+4. View results, toggle drift overlays, download exports
+
+Demo Mode loads outputs from `docs/demo-assets/expected-outputs/` and runs the complete drift analysis pipeline.
 
 ---
 
-## Demo Flow (< 2 minutes)
+## Configuration
 
-1. Click **"Load Demo Project"** on homepage
-2. Go to **"3. Generate"** tab
-3. Select locales: es-MX, fr-CA, ar
-4. Click **"Generate Variants"**
-5. View results in **"4. Results"** tab
+### Environment Variables
+
+```bash
+# .env
+OPENAI_API_KEY=sk-...               # Required for live generation
+IMAGE_MODEL=gpt-image-1             # Primary model (default)
+IMAGE_MODEL_FALLBACK=dall-e-2       # Fallback if primary fails
+DATABASE_URL=file:./db.sqlite       # Local SQLite (default)
+```
+
+> **Note:** Model defaults are configured in `src/env.js`. Adjust based on your API access tier.
+
+### Supported Locales
+
+| Locale | Language | Direction | Sample Text |
+|--------|----------|-----------|-------------|
+| `es-MX` | Spanish (Mexico) | LTR | "¡Descarga ahora!" |
+| `fr-CA` | French (Canada) | LTR | "Téléchargez maintenant!" |
+| `ar` | Arabic | RTL | "!حمّل الآن" |
 
 ---
 
-## Features
+## Screenshots
 
-### Sprint 1 (Current)
+### Homepage
+<!-- TODO: Replace with actual screenshot -->
+![Homepage](docs/screenshots/homepage-placeholder.png)
 
-- Project create/upload workflow
-- Canvas-based mask editor (brush, eraser, rectangle tools)
-- Locale selection: Spanish (Mexico), French (Canada), Arabic (RTL)
-- Variant generation with model fallback (gpt-image-1.5 → gpt-image-1)
-- Side-by-side comparison viewer
-- Per-locale download
+### Mask Editor
+<!-- TODO: Replace with actual screenshot -->
+![Mask Editor](docs/screenshots/mask-editor-placeholder.png)
 
-### Sprint 2 (Upcoming)
+### Variant Results with Drift Inspector
+<!-- TODO: Replace with actual screenshot -->
+![Results](docs/screenshots/results-placeholder.png)
 
-- Drift Inspector with pixel-level diff
-- RTL text rendering validation
-- Export ZIP + montage generation
-- Regeneration controls
+### 2×2 Montage Export
+<!-- TODO: Replace with actual screenshot -->
+![Montage](docs/screenshots/montage-placeholder.png)
+
+---
+
+## Project Structure
+
+```
+localelens/
+├── src/
+│   ├── app/                    # Next.js App Router pages
+│   │   ├── page.tsx            # Homepage with project list
+│   │   └── project/[id]/       # Project workflow (upload → mask → generate → results)
+│   ├── components/
+│   │   ├── project/            # MaskCanvas, LocaleSelector, VariantViewer
+│   │   └── ui/                 # shadcn/ui components
+│   └── server/
+│       ├── api/routers/        # tRPC endpoints (project, variant, image)
+│       ├── domain/             # Entities, value objects, services
+│       ├── infrastructure/     # Prisma repository implementations
+│       └── services/           # OpenAI, FileStore, Diff, Heatmap, Export
+├── prisma/
+│   └── schema.prisma           # Project, Mask, Variant models
+├── docs/
+│   ├── demo-assets/            # Base image, mask, expected outputs
+│   └── screenshots/            # README gallery images
+└── .local-data/                # Runtime storage (gitignored)
+```
 
 ---
 
 ## Tech Stack
 
-- **Framework:** Next.js 15 (App Router) + TypeScript
-- **API:** tRPC for type-safe server calls
-- **Database:** Prisma + SQLite (local-first)
-- **Styling:** Tailwind CSS v4 + shadcn/ui
-- **AI:** OpenAI Image Gen API (gpt-image-1.5)
+| Layer | Technology |
+|-------|------------|
+| Framework | Next.js 15 (App Router) |
+| Language | TypeScript (strict mode) |
+| API | tRPC v11 |
+| Database | Prisma + SQLite |
+| Styling | Tailwind CSS v4 + shadcn/ui |
+| Image Processing | Sharp |
+| AI | OpenAI Image Generation API |
 
 ---
 
-## Architecture
+## Architecture Decisions
 
-```text
-src/server/
-├── domain/                    # Clean architecture
-│   ├── entities/              # Type definitions
-│   ├── repositories/          # Interfaces (ISP)
-│   ├── services/              # Domain services
-│   └── value-objects/         # Locale, Drift
-├── infrastructure/            # Prisma implementations
-└── services/                  # OpenAI, FileStore
-```
+- **Local-first:** SQLite database, file-based asset storage. No external services required beyond OpenAI.
+- **Clean Architecture:** Domain layer is framework-agnostic. Repositories use interface segregation.
+- **Thin routers:** tRPC handlers delegate to domain services. Business logic is testable in isolation.
+- **Model fallback:** If `gpt-image-1` fails, automatically retries with `dall-e-2`.
+- **Demo Mode:** Pre-generated outputs enable full UX without API access—critical for contest judging.
+
+See [Engineering Decisions](docs/ENGINEERING_DECISIONS.md) for detailed rationale.
 
 ---
 
-## Environment Variables
+## Scripts
 
 ```bash
-# Required
-OPENAI_API_KEY=sk-...
-
-# Optional (defaults shown)
-IMAGE_MODEL=gpt-image-1.5
-IMAGE_MODEL_FALLBACK=gpt-image-1
-DATABASE_URL=file:./db.sqlite
+pnpm dev          # Start development server
+pnpm build        # Production build
+pnpm typecheck    # TypeScript validation
+pnpm db:push      # Sync Prisma schema to SQLite
+pnpm demo:seed    # Copy demo assets for offline demo
 ```
-
----
-
-## Documentation
-
-- [Contest Spec](docs/CONTEST_SPEC.md) - Project requirements
-- [Sprint Plan](docs/SPRINTS.md) - Execution roadmap
-- [Demo Script](docs/DEMO_SCRIPT.md) - Reproducible demo steps
-- [Engineering Decisions](docs/ENGINEERING_DECISIONS.md) - Technical choices
 
 ---
 
 ## Security
 
-- API keys are **server-side only** (never in client bundle)
-- No credentials committed to repo
-- Local-first: all data stays on your machine
+- API keys are server-side only (never bundled to client)
+- No credentials committed to repository
+- All data stored locally on your machine
+- `.env` is gitignored; `.env.example` is safe to commit
+
+---
+
+## Documentation
+
+- [Contest Spec](docs/CONTEST_SPEC.md) — Requirements and objectives
+- [Sprint Plan](docs/SPRINTS.md) — Development roadmap
+- [Demo Script](docs/DEMO_SCRIPT.md) — Step-by-step reproduction guide
+- [Engineering Decisions](docs/ENGINEERING_DECISIONS.md) — Technical rationale
 
 ---
 
@@ -134,4 +222,6 @@ MIT
 
 ---
 
-LocaleLens - Built for the OpenAI Image Gen API Contest
+<p align="center">
+  <strong>LocaleLens</strong> — OpenAI Image Generation API Contest Entry
+</p>
