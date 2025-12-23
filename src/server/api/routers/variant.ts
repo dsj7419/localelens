@@ -6,6 +6,7 @@
  */
 
 import { z } from "zod";
+import sharp from "sharp";
 import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
 import {
   PrismaProjectRepository,
@@ -27,6 +28,91 @@ import {
   type LocaleId,
   getLocaleMetadata,
 } from "~/server/domain/value-objects/locale";
+
+// =============================================================================
+// Helper: Filter text regions by mask overlap
+// =============================================================================
+
+/**
+ * Filter text regions to only include those that overlap with masked (edit) areas.
+ *
+ * This is CRITICAL for accurate translation:
+ * - The mask defines what the user ACTUALLY wants to edit
+ * - We should only translate text that falls within masked regions
+ * - Ignores text outside the mask (user chose not to edit those areas)
+ *
+ * @param textRegions - All detected text regions (from Vision analysis)
+ * @param maskBuffer - The mask PNG buffer (transparent = edit, opaque = keep)
+ * @returns Filtered text regions that overlap with edit areas
+ */
+async function filterRegionsByMask(
+  textRegions: TextRegion[],
+  maskBuffer: Buffer
+): Promise<TextRegion[]> {
+  try {
+    // Get mask dimensions and raw pixel data
+    const { data, info } = await sharp(maskBuffer)
+      .ensureAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+
+    const { width, height, channels } = info;
+
+    console.log(`[filterRegionsByMask] Mask dimensions: ${width}x${height}, checking ${textRegions.length} regions`);
+
+    const filteredRegions: TextRegion[] = [];
+
+    for (const region of textRegions) {
+      const box = region.boundingBox;
+
+      // Convert normalized (0-1) coordinates to pixel coordinates
+      const pixelX = Math.round(box.x * width);
+      const pixelY = Math.round(box.y * height);
+      const pixelW = Math.round(box.width * width);
+      const pixelH = Math.round(box.height * height);
+
+      // Sample multiple points within the region to check for mask overlap
+      // Check center and corners
+      const samplePoints = [
+        { x: pixelX + pixelW / 2, y: pixelY + pixelH / 2 }, // center
+        { x: pixelX + pixelW * 0.25, y: pixelY + pixelH * 0.25 }, // top-left quarter
+        { x: pixelX + pixelW * 0.75, y: pixelY + pixelH * 0.25 }, // top-right quarter
+        { x: pixelX + pixelW * 0.25, y: pixelY + pixelH * 0.75 }, // bottom-left quarter
+        { x: pixelX + pixelW * 0.75, y: pixelY + pixelH * 0.75 }, // bottom-right quarter
+      ];
+
+      let hasTransparentOverlap = false;
+
+      for (const point of samplePoints) {
+        const px = Math.max(0, Math.min(width - 1, Math.round(point.x)));
+        const py = Math.max(0, Math.min(height - 1, Math.round(point.y)));
+        const offset = (py * width + px) * channels;
+
+        // Check alpha channel - transparent (alpha < 128) means edit region
+        const alpha = data[offset + 3];
+        if (alpha !== undefined && alpha < 128) {
+          hasTransparentOverlap = true;
+          break;
+        }
+      }
+
+      if (hasTransparentOverlap) {
+        filteredRegions.push(region);
+        console.log(`[filterRegionsByMask] ✓ "${region.text.substring(0, 30)}..." overlaps with mask`);
+      } else {
+        console.log(`[filterRegionsByMask] ✗ "${region.text.substring(0, 30)}..." outside mask - skipping`);
+      }
+    }
+
+    console.log(`[filterRegionsByMask] Filtered: ${filteredRegions.length}/${textRegions.length} regions overlap with mask`);
+
+    return filteredRegions;
+  } catch (error) {
+    console.error(`[filterRegionsByMask] Error filtering regions:`, error);
+    // Fall back to all regions if filtering fails
+    return textRegions;
+  }
+}
 
 // Zod schemas
 const generateVariantSchema = z.object({
@@ -478,7 +564,22 @@ export const variantRouter = createTRPCRouter({
       }
 
       console.log(
-        `[VariantRouter] Vision pipeline: ${analysis.textRegions.length} text regions detected`
+        `[VariantRouter] Vision pipeline: ${analysis.textRegions.length} text regions detected (before mask filter)`
+      );
+
+      // CRITICAL: Filter text regions to only include those within the mask
+      // The mask is the source of truth - user defines what to edit
+      const filteredRegions = await filterRegionsByMask(analysis.textRegions, maskBuffer);
+
+      if (filteredRegions.length === 0) {
+        console.warn(`[VariantRouter] Vision pipeline: No text regions overlap with mask - falling back to all regions`);
+        // Fall back to all regions if none overlap (better UX than failing)
+      }
+
+      // Use filtered regions (or all if none matched)
+      const regionsToTranslate = filteredRegions.length > 0 ? filteredRegions : analysis.textRegions;
+      console.log(
+        `[VariantRouter] Vision pipeline: Using ${regionsToTranslate.length} text regions for translation`
       );
 
       // Generate each locale sequentially
@@ -489,9 +590,9 @@ export const variantRouter = createTRPCRouter({
         );
 
         try {
-          // Step 2: Translate
+          // Step 2: Translate (only regions that overlap with mask)
           const translationResult = await translationService.translateTexts({
-            textRegions: analysis.textRegions,
+            textRegions: regionsToTranslate,
             targetLocale: locale,
             context: {
               imageType: analysis.layout,
@@ -503,9 +604,13 @@ export const variantRouter = createTRPCRouter({
             throw new Error(`Translation failed: ${translationResult.error}`);
           }
 
-          // Step 3: Build prompt
+          // Step 3: Build prompt (using filtered analysis)
+          const filteredAnalysis: ImageAnalysis = {
+            ...analysis,
+            textRegions: regionsToTranslate,
+          };
           const promptResult = promptBuilder.buildPrompt({
-            analysis,
+            analysis: filteredAnalysis,
             translations: translationResult.translations,
             locale,
             ultraStrict,
@@ -564,6 +669,7 @@ export const variantRouter = createTRPCRouter({
         analysisUsed: {
           layout: analysis.layout,
           textRegionCount: analysis.textRegions.length,
+          filteredRegionCount: regionsToTranslate.length,
         },
       };
     }),
@@ -628,10 +734,22 @@ export const variantRouter = createTRPCRouter({
         throw new Error("No text regions found in analysis - cannot verify");
       }
 
+      // Get mask to filter regions (verification should match what was generated)
+      const maskBuffer = await fileStore.getMaskImage();
+      let regionsToVerify = textRegions;
+
+      if (maskBuffer) {
+        const filteredRegions = await filterRegionsByMask(textRegions, maskBuffer);
+        if (filteredRegions.length > 0) {
+          regionsToVerify = filteredRegions;
+          console.log(`[VariantRouter] Filtered to ${regionsToVerify.length} regions for verification`);
+        }
+      }
+
       // Get translations for this locale
       console.log(`[VariantRouter] Getting translations for ${localeName}...`);
       const translationResult = await translationService.translateTexts({
-        textRegions,
+        textRegions: regionsToVerify,
         targetLocale: locale,
         context: {
           imageType: analysis.layout,
