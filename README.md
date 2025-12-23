@@ -335,10 +335,8 @@ pnpm demo:seed    # Load demo assets
 
 | Document | Purpose |
 | --- | --- |
-| [Contest Spec](docs/CONTEST_SPEC.md) | Requirements and strategy |
-| [Sprint Plan](docs/SPRINTS.md) | Development roadmap |
-| [Engineering Decisions](docs/ENGINEERING_DECISIONS.md) | 59 documented decisions |
-| [API Findings](docs/FINDINGS.md) | gpt-image-1.5 discoveries |
+| [API Findings](docs/FINDINGS.md) | gpt-image-1.5 behavior discoveries |
+| [OpenAI API Reference](docs/OPENAI_API_DOCUMENTATION.md) | Image generation API documentation |
 
 ---
 
