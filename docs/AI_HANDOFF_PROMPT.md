@@ -43,13 +43,32 @@
 - Message: "Server must complete current operation. Results will be discarded."
 - OpenAI API has no cancel endpoint, so this sets correct user expectations
 
+**API Parameter Optimization (ED-058):**
+
+- Added `moderation: "auto"` — Standard content filtering for contest safety (no adult content)
+- Added `input_fidelity: "high"` — Better preserves original image details during editing
+- These are new gpt-image-1.5 parameters not yet in OpenAI TypeScript SDK types
+- Used type assertions (`as any`) to work around SDK limitation
+
+**Image Lightbox for Results (ED-059):**
+
+- `src/components/project/ImageLightbox.tsx` — NEW component using shadcn Dialog (Radix)
+- Click-to-zoom on Original and Variant images in Results step
+- Visual feedback: `cursor-zoom-in`, ring hover effect, "Click to view full size" tooltip
+- Smooth fade-in animation with loading spinner
+- Full accessibility with sr-only DialogTitle
+- Images display at max 90vw × 85vh while maintaining aspect ratio
+
 **Files Created/Modified:**
 
 - `src/server/services/promptEngineeringService.ts` — NEW (460+ lines)
+- `src/server/services/openaiImage.ts` — MODIFIED (moderation, input_fidelity params)
 - `src/server/api/routers/variant.ts` — MODIFIED (added import, schema option, integration)
 - `src/app/project/[id]/page.tsx` — MODIFIED (isCancelling state)
 - `src/components/project/sidebar/GenerateSidebar.tsx` — MODIFIED (cancel button UX)
 - `src/components/project/steps/GenerateStep.tsx` — MODIFIED (pass through isCancelling)
+- `src/components/project/ImageLightbox.tsx` — NEW (lightbox component)
+- `src/components/project/steps/ResultsStep.tsx` — MODIFIED (lightbox integration)
 
 ### Sprint 9 Context (Previous Session - COMPLETE)
 
@@ -107,7 +126,7 @@ Read these files IN ORDER to understand the project:
 
 1. `CLAUDE.md` - Quick project overview and architecture
 2. `docs/SPRINTS.md` - Sprint status (Sprints 0-9 COMPLETE, Sprint 10 next)
-3. `docs/ENGINEERING_DECISIONS.md` - 55 engineering decisions with rationale
+3. `docs/ENGINEERING_DECISIONS.md` - 59 engineering decisions with rationale
 4. `docs/CONTEST_SPEC.md` - Contest requirements and win strategy
 5. `docs/FINDINGS.md` - API discoveries and lessons learned
 
@@ -174,6 +193,7 @@ After reading, confirm:
 - Cancel button shows "Cancelling..." with explanatory message
 - Toast message on auto-mask: "This is a starting point — refine if needed"
 - Dynamic canvas sizing (works with ANY image resolution)
+- **Image Lightbox** (ED-059): Click any image in Results to view at full size in modal overlay
 
 ## Step 3: Your Mission - Continue Sprint 10
 
@@ -241,7 +261,7 @@ Create compelling demo showing:
 ## Step 5: Before Writing ANY Code
 
 1. Read the existing Sprint 8-9 services to understand the patterns
-2. Check `docs/ENGINEERING_DECISIONS.md` for prior decisions (55 so far!)
+2. Check `docs/ENGINEERING_DECISIONS.md` for prior decisions (59 so far!)
 3. Plan your approach and explain it
 4. Ask clarifying questions if requirements are unclear
 
@@ -295,6 +315,10 @@ pnpm build            # Production build (uses Turbopack)
 
 6. **Turbopack Build** (ED-042): Windows has permission issues with legacy webpack. Build now uses `--turbo` flag.
 
+7. **API Parameters for gpt-image-1.5** (ED-058): Added `moderation: "auto"` for content safety and `input_fidelity: "high"` for better image preservation. TypeScript SDK doesn't have these types yet, so we use type assertions.
+
+8. **Image Lightbox** (ED-059): Click-to-zoom on Results page images. Uses shadcn Dialog (Radix) with smooth animations and full accessibility.
+
 ## Now: Begin Sprint 10
 
 Please read the documentation files listed in Step 1 and confirm:
@@ -331,3 +355,4 @@ The goal is that ANY AI can pick up exactly where you left off.
 | 2025-12-22 | 1.3 | Sprint 9 COMPLETE - VerificationService, MaskSuggestionService implemented |
 | 2025-12-23 | 1.4 | Sprint 9 refinements: semantic positions, auto-analyze on upload, toast message, Continue button fix |
 | 2025-12-23 | 1.5 | Sprint 10 IN PROGRESS - PromptEngineeringService (GPT-4o writes prompts for gpt-image-1.5), cancel button UX |
+| 2025-12-23 | 1.6 | API optimization (moderation, input_fidelity), Image lightbox for results (ED-058, ED-059) |
