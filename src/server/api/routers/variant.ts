@@ -11,12 +11,16 @@ import {
   PrismaProjectRepository,
   PrismaMaskRepository,
   PrismaVariantRepository,
+  PrismaImageAnalysisRepository,
 } from "~/server/infrastructure/repositories/prisma.project.repository";
 import { createFileStore } from "~/server/services/fileStore";
 import { getOpenAIImageService } from "~/server/services/openaiImage";
 import { getLocalePlanService } from "~/server/domain/services/localePlan.service";
 import { getVariantGenerationService } from "~/server/domain/services/variantGeneration.service";
 import { getDemoModeService } from "~/server/services/demoModeService";
+import { getTextDetectionService, type ImageAnalysis, type TextRegion } from "~/server/services/textDetectionService";
+import { getTranslationService } from "~/server/services/translationService";
+import { getDynamicPromptBuilder } from "~/server/domain/services/dynamicPromptBuilder";
 import {
   SUPPORTED_LOCALES,
   type LocaleId,
@@ -36,6 +40,24 @@ const generateAllVariantsSchema = z.object({
   locales: z.array(z.enum(SUPPORTED_LOCALES)).min(1).max(3),
   /** Enable pixel-perfect mode for 0% drift (default: true) */
   pixelPerfect: z.boolean().default(true),
+});
+
+const generateWithVisionSchema = z.object({
+  projectId: z.string().cuid(),
+  locale: z.enum(SUPPORTED_LOCALES),
+  /** Enable pixel-perfect mode for 0% drift (default: true) */
+  pixelPerfect: z.boolean().default(true),
+  /** Use ultra-strict preservation mode */
+  ultraStrict: z.boolean().default(false),
+});
+
+const generateAllWithVisionSchema = z.object({
+  projectId: z.string().cuid(),
+  locales: z.array(z.enum(SUPPORTED_LOCALES)).min(1).max(3),
+  /** Enable pixel-perfect mode for 0% drift (default: true) */
+  pixelPerfect: z.boolean().default(true),
+  /** Use ultra-strict preservation mode */
+  ultraStrict: z.boolean().default(false),
 });
 
 export const variantRouter = createTRPCRouter({
@@ -191,6 +213,352 @@ export const variantRouter = createTRPCRouter({
         results,
         successCount,
         totalCount: locales.length,
+      };
+    }),
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Vision-Powered Generation (Two-Model Pipeline)
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Generate a variant using Vision-powered pipeline
+   *
+   * This uses the two-model pipeline:
+   * 1. GPT-4o Vision (Inspector) - Detect text in image
+   * 2. GPT-4o (Translator) - Translate detected text
+   * 3. DynamicPromptBuilder - Build image-specific prompt
+   * 4. gpt-image-1.5 (Artist) - Generate localized variant
+   *
+   * This works with ANY image, not just the demo screenshot.
+   */
+  generateWithVision: publicProcedure
+    .input(generateWithVisionSchema)
+    .mutation(async ({ ctx, input }) => {
+      const { projectId, locale, pixelPerfect, ultraStrict } = input;
+
+      // Load dependencies
+      const projectRepo = new PrismaProjectRepository(ctx.db);
+      const maskRepo = new PrismaMaskRepository(ctx.db);
+      const variantRepo = new PrismaVariantRepository(ctx.db);
+      const imageAnalysisRepo = new PrismaImageAnalysisRepository(ctx.db);
+      const fileStore = createFileStore(projectId);
+      const imageService = getOpenAIImageService();
+      const textDetectionService = getTextDetectionService();
+      const translationService = getTranslationService();
+      const promptBuilder = getDynamicPromptBuilder();
+      const variantGenService = getVariantGenerationService();
+
+      // Validate project
+      const project = await projectRepo.findById(projectId);
+      if (!project) {
+        throw new Error("Project not found");
+      }
+
+      const mask = await maskRepo.findByProjectId(projectId);
+      if (!mask) {
+        throw new Error("No mask found for project");
+      }
+
+      // Load images
+      const baseImageBuffer = await fileStore.getBaseImage();
+      if (!baseImageBuffer) {
+        throw new Error("Base image not found");
+      }
+
+      const maskBuffer = await fileStore.getMaskImage();
+      if (!maskBuffer) {
+        throw new Error("Mask image not found");
+      }
+
+      console.log(`[VariantRouter] Vision pipeline: Starting for ${getLocaleMetadata(locale).name}`);
+
+      // Step 1: Get or create image analysis
+      let analysis: ImageAnalysis;
+      const existingAnalysis = await imageAnalysisRepo.findByProjectId(projectId);
+
+      if (existingAnalysis) {
+        console.log(`[VariantRouter] Vision pipeline: Using existing analysis`);
+        // Reconstruct ImageAnalysis from stored data
+        analysis = {
+          textRegions: JSON.parse(existingAnalysis.textRegions) as TextRegion[],
+          layout: existingAnalysis.layout as ImageAnalysis["layout"],
+          surfaceTexture: existingAnalysis.surfaceTexture,
+          dominantColors: JSON.parse(existingAnalysis.dominantColors) as string[],
+          hasUIElements: existingAnalysis.hasUIElements,
+          uiElements: existingAnalysis.uiElements
+            ? (JSON.parse(existingAnalysis.uiElements) as string[])
+            : undefined,
+          imageDescription: existingAnalysis.imageDescription,
+          analyzedAt: existingAnalysis.analyzedAt,
+        };
+      } else {
+        console.log(`[VariantRouter] Vision pipeline: Running new analysis`);
+        analysis = await textDetectionService.analyzeImage(baseImageBuffer);
+
+        // Store analysis for future use
+        await imageAnalysisRepo.upsert({
+          projectId,
+          textRegions: JSON.stringify(analysis.textRegions),
+          layout: analysis.layout,
+          surfaceTexture: analysis.surfaceTexture,
+          dominantColors: JSON.stringify(analysis.dominantColors),
+          hasUIElements: analysis.hasUIElements,
+          uiElements: analysis.uiElements ? JSON.stringify(analysis.uiElements) : undefined,
+          imageDescription: analysis.imageDescription,
+        });
+      }
+
+      console.log(
+        `[VariantRouter] Vision pipeline: ${analysis.textRegions.length} text regions, layout: ${analysis.layout}`
+      );
+
+      // Step 2: Translate detected text
+      const translationResult = await translationService.translateTexts({
+        textRegions: analysis.textRegions,
+        targetLocale: locale,
+        context: {
+          imageType: analysis.layout,
+          tone: "neutral",
+        },
+      });
+
+      if (!translationResult.success) {
+        throw new Error(`Translation failed: ${translationResult.error}`);
+      }
+
+      console.log(
+        `[VariantRouter] Vision pipeline: Translated ${translationResult.translations.length} texts to ${locale}`
+      );
+
+      // Step 3: Build dynamic prompt
+      const promptResult = promptBuilder.buildPrompt({
+        analysis,
+        translations: translationResult.translations,
+        locale,
+        ultraStrict,
+      });
+
+      console.log(
+        `[VariantRouter] Vision pipeline: Built ${promptResult.layout} prompt with ${promptResult.textRegionCount} regions`
+      );
+
+      // Step 4: Generate variant
+      const result = await variantGenService.generateVariant(
+        {
+          projectId,
+          locale,
+          prompt: promptResult.prompt,
+          baseImageBuffer,
+          maskBuffer,
+          pixelPerfect,
+        },
+        imageService,
+        fileStore,
+        variantRepo
+      );
+
+      if (!result.success || !result.variant || !result.imageBuffer) {
+        throw new Error(result.error ?? "Failed to generate variant");
+      }
+
+      console.log(
+        `[VariantRouter] Vision pipeline: Generated ${locale} with model ${result.modelUsed}`
+      );
+
+      // Return with base64 for immediate display
+      const imageBase64 = result.imageBuffer.toString("base64");
+
+      return {
+        variant: result.variant,
+        imageBase64: `data:image/png;base64,${imageBase64}`,
+        modelUsed: result.modelUsed,
+        driftScore: result.driftScore,
+        driftStatus: result.driftStatus,
+        visionPipeline: true,
+        analysisUsed: {
+          layout: analysis.layout,
+          textRegionCount: analysis.textRegions.length,
+          translationCount: translationResult.translations.length,
+        },
+      };
+    }),
+
+  /**
+   * Generate variants for multiple locales using Vision pipeline
+   */
+  generateAllWithVision: publicProcedure
+    .input(generateAllWithVisionSchema)
+    .mutation(async ({ ctx, input }) => {
+      const { projectId, locales, pixelPerfect, ultraStrict } = input;
+      const results: Array<{
+        locale: LocaleId;
+        success: boolean;
+        error?: string;
+        modelUsed?: string;
+        visionPipeline: boolean;
+      }> = [];
+
+      // Load dependencies
+      const projectRepo = new PrismaProjectRepository(ctx.db);
+      const maskRepo = new PrismaMaskRepository(ctx.db);
+      const variantRepo = new PrismaVariantRepository(ctx.db);
+      const imageAnalysisRepo = new PrismaImageAnalysisRepository(ctx.db);
+      const fileStore = createFileStore(projectId);
+      const imageService = getOpenAIImageService();
+      const textDetectionService = getTextDetectionService();
+      const translationService = getTranslationService();
+      const promptBuilder = getDynamicPromptBuilder();
+      const variantGenService = getVariantGenerationService();
+
+      // Validate project
+      const project = await projectRepo.findById(projectId);
+      if (!project) {
+        throw new Error("Project not found");
+      }
+
+      const mask = await maskRepo.findByProjectId(projectId);
+      if (!mask) {
+        throw new Error("No mask found for project");
+      }
+
+      // Load images once
+      const baseImageBuffer = await fileStore.getBaseImage();
+      if (!baseImageBuffer) {
+        throw new Error("Base image not found");
+      }
+
+      const maskBuffer = await fileStore.getMaskImage();
+      if (!maskBuffer) {
+        throw new Error("Mask image not found");
+      }
+
+      console.log(
+        `[VariantRouter] Vision pipeline (batch): Starting for ${locales.length} locales`
+      );
+
+      // Step 1: Get or create image analysis (once for all locales)
+      let analysis: ImageAnalysis;
+      const existingAnalysis = await imageAnalysisRepo.findByProjectId(projectId);
+
+      if (existingAnalysis) {
+        console.log(`[VariantRouter] Vision pipeline: Using existing analysis`);
+        analysis = {
+          textRegions: JSON.parse(existingAnalysis.textRegions) as TextRegion[],
+          layout: existingAnalysis.layout as ImageAnalysis["layout"],
+          surfaceTexture: existingAnalysis.surfaceTexture,
+          dominantColors: JSON.parse(existingAnalysis.dominantColors) as string[],
+          hasUIElements: existingAnalysis.hasUIElements,
+          uiElements: existingAnalysis.uiElements
+            ? (JSON.parse(existingAnalysis.uiElements) as string[])
+            : undefined,
+          imageDescription: existingAnalysis.imageDescription,
+          analyzedAt: existingAnalysis.analyzedAt,
+        };
+      } else {
+        console.log(`[VariantRouter] Vision pipeline: Running new analysis`);
+        analysis = await textDetectionService.analyzeImage(baseImageBuffer);
+
+        // Store for future use
+        await imageAnalysisRepo.upsert({
+          projectId,
+          textRegions: JSON.stringify(analysis.textRegions),
+          layout: analysis.layout,
+          surfaceTexture: analysis.surfaceTexture,
+          dominantColors: JSON.stringify(analysis.dominantColors),
+          hasUIElements: analysis.hasUIElements,
+          uiElements: analysis.uiElements ? JSON.stringify(analysis.uiElements) : undefined,
+          imageDescription: analysis.imageDescription,
+        });
+      }
+
+      console.log(
+        `[VariantRouter] Vision pipeline: ${analysis.textRegions.length} text regions detected`
+      );
+
+      // Generate each locale sequentially
+      for (const locale of locales) {
+        const localeMetadata = getLocaleMetadata(locale);
+        console.log(
+          `[VariantRouter] Vision pipeline: Generating ${localeMetadata.name} (${locales.indexOf(locale) + 1}/${locales.length})`
+        );
+
+        try {
+          // Step 2: Translate
+          const translationResult = await translationService.translateTexts({
+            textRegions: analysis.textRegions,
+            targetLocale: locale,
+            context: {
+              imageType: analysis.layout,
+              tone: "neutral",
+            },
+          });
+
+          if (!translationResult.success) {
+            throw new Error(`Translation failed: ${translationResult.error}`);
+          }
+
+          // Step 3: Build prompt
+          const promptResult = promptBuilder.buildPrompt({
+            analysis,
+            translations: translationResult.translations,
+            locale,
+            ultraStrict,
+          });
+
+          // Step 4: Generate
+          const result = await variantGenService.generateVariant(
+            {
+              projectId,
+              locale,
+              prompt: promptResult.prompt,
+              baseImageBuffer,
+              maskBuffer,
+              pixelPerfect,
+            },
+            imageService,
+            fileStore,
+            variantRepo
+          );
+
+          results.push({
+            locale,
+            success: result.success,
+            error: result.error,
+            modelUsed: result.modelUsed,
+            visionPipeline: true,
+          });
+
+          if (result.success) {
+            console.log(
+              `[VariantRouter] Vision pipeline: Generated ${locale} with model ${result.modelUsed}`
+            );
+          }
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : "Unknown error";
+          console.error(`[VariantRouter] Vision pipeline: Failed ${locale}: ${errorMessage}`);
+          results.push({
+            locale,
+            success: false,
+            error: errorMessage,
+            visionPipeline: true,
+          });
+        }
+      }
+
+      const successCount = results.filter((r) => r.success).length;
+      console.log(
+        `[VariantRouter] Vision pipeline complete: ${successCount}/${locales.length} succeeded`
+      );
+
+      return {
+        results,
+        successCount,
+        totalCount: locales.length,
+        visionPipeline: true,
+        analysisUsed: {
+          layout: analysis.layout,
+          textRegionCount: analysis.textRegions.length,
+        },
       };
     }),
 

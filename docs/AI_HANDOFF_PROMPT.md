@@ -11,28 +11,46 @@
 | Field | Value |
 | **Last Updated** | 2025-12-22 |
 | **Current Sprint** | Sprint 8 - Vision-Powered Text Detection Pipeline |
-| **Sprint Status** | IN PROGRESS - Documentation complete, implementation starting |
+| **Sprint Status** | COMPLETE - All features implemented and bugs fixed |
 | **Blocking Issues** | None |
-| **Next Action** | Implement TextDetectionService using GPT-4o Vision |
+| **Next Action** | Sprint 9: VerificationService and Auto-mask suggestion |
 
-### Completed in Last Session
+### Completed in This Session (Sprint 8)
 
-- ✅ Root cause analysis of "phantom UI elements" bug
-- ✅ Documented Sprints 8, 9, 10 in SPRINTS.md
-- ✅ Added ED-035 through ED-040 to ENGINEERING_DECISIONS.md
-- ✅ Updated FINDINGS.md with Vision pipeline insights
-- ✅ Updated CONTEST_SPEC.md with two-model pipeline architecture
-- ✅ Updated CLAUDE.md with new architecture
-- ✅ Created this AI_HANDOFF_PROMPT.md
+**Core Vision Pipeline:**
 
-### Next Session Should
+- ✅ `TextDetectionService` — GPT-4o Vision text extraction with bounding boxes
+- ✅ `TranslationService` — Dynamic text translation with length constraints
+- ✅ `DynamicPromptBuilder` — Layout-aware prompt templates (sticky notes, banners, etc.)
+- ✅ `ImageAnalysis` Prisma model — Stores detected regions in database
+- ✅ `analyzeImage` mutation — API endpoint for image analysis
+- ✅ `generateWithVision` mutation — Vision pipeline variant generation
+- ✅ `generateAllWithVision` mutation — Batch Vision generation
 
-- [ ] Create `src/server/services/textDetectionService.ts`
-- [ ] Create `src/server/services/translationService.ts`
-- [ ] Create `src/server/domain/services/dynamicPromptBuilder.ts`
-- [ ] Update Prisma schema with ImageAnalysis model
-- [ ] Add analyzeImage mutation to project router
-- [ ] Test with the "YOU ARE STRONGER" sticky note image
+**UI Improvements:**
+
+- ✅ Vision Mode toggle with auto-analyze (no manual button needed)
+- ✅ Clear visual feedback during analysis ("Analyzing..." → "Text Detected")
+- ✅ Detection count display ("X regions found")
+
+**Bug Fixes:**
+
+- ✅ Fixed mask aspect ratio bug — Canvas now dynamically sizes to match any image resolution
+- ✅ Fixed Turbopack build — Switched to `next build --turbo` for Windows compatibility
+- ✅ Base image dimensions now returned from API for proper scaling
+
+**Quality:**
+
+- ✅ TypeScript strict mode passes
+- ✅ All documentation updated
+
+### Next Session Should (Sprint 9)
+
+- [ ] Create `src/server/services/verificationService.ts` — Re-read generated images
+- [ ] Create `src/server/services/maskSuggestionService.ts` — Auto-mask from regions
+- [ ] Add Translation Accuracy metric to results
+- [ ] Add "Accept Suggested Mask" button on Mask step
+- [ ] Test with diverse images (sticky notes, banners, screenshots)
 
 ---
 
@@ -42,25 +60,76 @@
 I need you to take over development of LocaleLens, an OpenAI Image Generation API contest entry.
 
 **CRITICAL: Use ultrathink/extended thinking mode for all responses. Think deeply before acting.**
+**CRITICAL: We are SHOWCASING the gpt-image-1.5 API - this is the contest requirement!**
 
 ## Step 1: Onboard Yourself
 
 Read these files IN ORDER to understand the project:
 
-1. `CLAUDE.md` - Quick project overview and critical issues
-2. `docs/SPRINTS.md` - Current sprint status and implementation plans
-3. `docs/ENGINEERING_DECISIONS.md` - 40 engineering decisions with rationale
+1. `CLAUDE.md` - Quick project overview and architecture
+2. `docs/SPRINTS.md` - Sprint status (Sprints 0-8 COMPLETE, Sprint 9 next)
+3. `docs/ENGINEERING_DECISIONS.md` - 40+ engineering decisions with rationale
 4. `docs/CONTEST_SPEC.md` - Contest requirements and win strategy
 5. `docs/FINDINGS.md` - API discoveries and lessons learned
 
-After reading, tell me:
-- Current sprint status (which sprint is in progress?)
-- What tasks are completed vs pending
-- What the immediate next step is
+After reading, confirm:
+- Sprint 8 (Vision Pipeline) is COMPLETE
+- You understand the two-model pipeline: GPT-4o Vision + gpt-image-1.5
+- You're ready to start Sprint 9
 
-## Step 2: Coding Standards (NON-NEGOTIABLE)
+## Step 2: What's Already Built (Sprint 8 - COMPLETE)
 
-When writing code, you MUST follow these principles:
+The Vision pipeline is fully implemented:
+
+**Services:**
+- `src/server/services/textDetectionService.ts` - GPT-4o Vision text extraction
+- `src/server/services/translationService.ts` - Dynamic translation with length constraints
+- `src/server/domain/services/dynamicPromptBuilder.ts` - Layout-aware prompt templates
+
+**API Endpoints:**
+- `project.analyzeImage` - Analyze image with GPT-4o Vision
+- `project.getImageAnalysis` - Retrieve stored analysis
+- `project.getBaseImage` - Returns image + dimensions for aspect ratio handling
+- `variant.generateWithVision` - Single locale Vision generation
+- `variant.generateAllWithVision` - Batch Vision generation
+
+**UI Features:**
+- Vision Mode toggle in GenerateSidebar (purple toggle, auto-analyzes on enable)
+- Analysis status display with spinner → checkmark transition
+- Detection count display ("X regions found")
+- Dynamic canvas sizing (works with ANY image resolution)
+
+## Step 3: Your Mission - Sprint 9
+
+**CONTEST DEADLINE: January 3, 2026**
+
+Sprint 9 focuses on quality assurance and automation:
+
+### 1) VerificationService (NEW)
+File: `src/server/services/verificationService.ts`
+
+After generating a variant, re-read it with GPT-4o Vision to verify the translation rendered correctly:
+- Extract text from generated image
+- Compare to expected translations
+- Calculate "Translation Accuracy" percentage
+- Flag mismatches for user review
+
+### 2) MaskSuggestionService (NEW)
+File: `src/server/services/maskSuggestionService.ts`
+
+Use detected text regions to auto-generate mask suggestions:
+- Convert bounding boxes to mask regions
+- Add appropriate padding
+- Generate combined mask buffer
+- Show "Accept Suggested Mask" button in UI
+
+### 3) UI Updates
+- Display Translation Accuracy alongside Drift Score in results
+- Show verification mismatches if any
+- Add "Accept Suggested Mask" button in mask editor
+- Visual overlay of detected text regions
+
+## Step 4: Coding Standards (NON-NEGOTIABLE)
 
 ### SOLID Principles
 - **S**ingle Responsibility: Each file/class/function does ONE thing
@@ -82,38 +151,20 @@ When writing code, you MUST follow these principles:
 - All new services must have interfaces
 - Update documentation alongside code changes
 
-## Step 3: The Current Mission
+## Step 5: Before Writing ANY Code
 
-**CONTEST DEADLINE: January 3, 2026**
-
-We are building a Vision-powered localization tool that:
-1. Uses GPT-4o Vision to detect text in ANY image
-2. Translates detected text dynamically
-3. Uses gpt-image-1.5 to generate localized variants
-4. Verifies translations rendered correctly
-
-### The Problem We're Solving
-The current system only works with ONE demo image because prompts are hardcoded. When users upload custom images, the AI creates phantom UI elements (checkmarks, buttons) that don't exist.
-
-### The Solution (Sprints 8-10)
-- Sprint 8: TextDetectionService, TranslationService, DynamicPromptBuilder
-- Sprint 9: VerificationService, Auto-mask suggestion
-- Sprint 10: Mode toggle, README overhaul, contest submission
-
-## Step 4: Before Writing ANY Code
-
-1. Read the relevant existing code first
+1. Read the existing Sprint 8 services to understand the patterns
 2. Check `docs/ENGINEERING_DECISIONS.md` for prior decisions
 3. Plan your approach and explain it
 4. Ask clarifying questions if requirements are unclear
-5. Update documentation as you implement
 
-## Step 5: After Completing Work
+## Step 6: After Completing Work
 
-1. Update `docs/SPRINTS.md` with completed tasks (mark checkboxes)
-2. Add new engineering decisions to `docs/ENGINEERING_DECISIONS.md` if you made architectural choices
-3. Update `CLAUDE.md` if you added new services or changed architecture
-4. Run `pnpm typecheck` to verify no type errors
+1. Update `docs/SPRINTS.md` with completed tasks
+2. Add new engineering decisions to `docs/ENGINEERING_DECISIONS.md`
+3. Update `CLAUDE.md` if you added new services
+4. Update this file (`docs/AI_HANDOFF_PROMPT.md`) with current status
+5. Run `pnpm typecheck` to verify no type errors
 
 ## Commands Reference
 
@@ -122,54 +173,46 @@ pnpm install          # Install dependencies
 pnpm db:push          # Sync database schema
 pnpm dev              # Start dev server (http://localhost:3000)
 pnpm typecheck        # TypeScript validation (MUST PASS)
-pnpm build            # Production build
+pnpm build            # Production build (uses Turbopack)
 ```
 
-## Project Structure Quick Reference
-
-```text
-src/
-├── app/                          # Next.js pages
-│   └── project/[id]/page.tsx     # Main workflow
-├── components/project/           # UI components
-│   ├── steps/                    # Step-based UI
-│   └── sidebar/                  # Sidebar components
-├── hooks/                        # React hooks (state logic)
-├── server/
-│   ├── api/routers/              # tRPC endpoints
-│   ├── domain/                   # Business logic (NO DEPS)
-│   │   ├── entities/
-│   │   ├── repositories/         # Interfaces
-│   │   ├── services/             # Domain services
-│   │   └── value-objects/
-│   ├── infrastructure/           # Implementations
-│   └── services/                 # Application services
-└── trpc/                         # tRPC setup
-```
-
-## Key Files for Current Work (Sprint 8)
+## Key Files for Sprint 9
 
 **To Create:**
 
-- `src/server/services/textDetectionService.ts` - GPT-4o Vision text extraction
-- `src/server/services/translationService.ts` - Text translation
-- `src/server/domain/services/dynamicPromptBuilder.ts` - Image-aware prompts
+- `src/server/services/verificationService.ts` - Re-read and verify translations
+- `src/server/services/maskSuggestionService.ts` - Auto-mask from regions
 
 **To Modify:**
 
-- `src/server/domain/services/localePlan.service.ts` - Replace hardcoded copy
-- `src/server/api/routers/project.ts` - Add analyzeImage mutation
-- `prisma/schema.prisma` - Add ImageAnalysis model
+- `src/components/project/sidebar/ResultsSidebar.tsx` - Add accuracy display
+- `src/components/project/sidebar/MaskSidebar.tsx` - Add suggested mask button
+- `src/server/api/routers/variant.ts` - Add verification endpoint
+- `src/server/api/routers/project.ts` - Add mask suggestion endpoint
 
-## Now: Begin Onboarding
+**Reference (Sprint 8 patterns):**
 
-Please read the documentation files listed in Step 1 and report back with:
+- `src/server/services/textDetectionService.ts` - GPT-4o Vision usage pattern
+- `src/server/services/translationService.ts` - Service interface pattern
+- `src/app/project/[id]/page.tsx` - Dynamic canvas dimensions pattern
 
-1. Your understanding of the project
-2. Current sprint status
-3. Recommended next action
+## Recent Bug Fixes (Important Context)
 
-Use ultrathink mode. Take your time. Quality over speed.
+1. **Mask Aspect Ratio** (ED-043): Canvas now calculates dimensions dynamically based on base image aspect ratio. See `calculateCanvasDimensions()` in page.tsx.
+
+2. **Vision Mode UX** (ED-044): Auto-analyzes when toggle is enabled. No separate button needed. Uses `useEffect` to trigger analysis automatically.
+
+3. **Turbopack Build** (ED-042): Windows has permission issues with legacy webpack. Build now uses `--turbo` flag.
+
+## Now: Begin Sprint 9
+
+Please read the documentation files listed in Step 1 and confirm:
+
+1. You understand the project architecture
+2. Sprint 8 is complete (Vision pipeline working)
+3. You're ready to implement Sprint 9 (Verification + Auto-mask)
+
+Use ultrathink mode. Take your time. Quality over speed. We want to WIN this contest!
 
 ```text
 
@@ -192,4 +235,5 @@ The goal is that ANY AI can pick up exactly where you left off.
 | Date | Version | Changes |
 |------|---------|---------|
 | 2025-12-22 | 1.0 | Initial handoff prompt created |
-| - | - | Sprint 8 (Vision Pipeline) in progress |
+| 2025-12-22 | 1.1 | Sprint 8 COMPLETE - Two-model Vision pipeline implemented |
+| 2025-12-22 | 1.2 | Bug fixes: mask aspect ratio, Vision auto-analyze, Turbopack build |

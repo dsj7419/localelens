@@ -12,12 +12,15 @@ import {
   PrismaMaskRepository,
   PrismaVariantRepository,
   PrismaProjectAggregateRepository,
+  PrismaImageAnalysisRepository,
 } from "~/server/infrastructure/repositories/prisma.project.repository";
 import { createFileStore } from "~/server/services/fileStore";
 import { getExportService } from "~/server/services/exportService";
+import sharp from "sharp";
 import { getMontageService } from "~/server/services/montageService";
 import { createImageUploadOrchestrator } from "~/server/services/imageUploadOrchestrator";
 import { createExportOrchestrator } from "~/server/services/exportOrchestrator";
+import { getTextDetectionService } from "~/server/services/textDetectionService";
 import { SUPPORTED_LOCALES, type LocaleId } from "~/server/domain/value-objects/locale";
 import fs from "fs/promises";
 import path from "path";
@@ -134,6 +137,101 @@ export const projectRouter = createTRPCRouter({
     }),
 
   // ───────────────────────────────────────────────────────────────────────────
+  // Vision-Powered Image Analysis (GPT-4o Vision)
+  // ───────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Analyze image using GPT-4o Vision to detect text regions
+   *
+   * This is the INSPECTOR in the two-model pipeline:
+   * GPT-4o Vision (Inspector) -> GPT-4o (Translator) -> gpt-image-1.5 (Artist)
+   */
+  analyzeImage: publicProcedure
+    .input(projectIdSchema)
+    .mutation(async ({ ctx, input }) => {
+      const fileStore = createFileStore(input.projectId);
+      const imageAnalysisRepo = new PrismaImageAnalysisRepository(ctx.db);
+      const textDetectionService = getTextDetectionService();
+
+      // Get base image
+      const baseImageBuffer = await fileStore.getBaseImage();
+      if (!baseImageBuffer) {
+        throw new Error("No base image found for this project");
+      }
+
+      console.log(`[analyzeImage] Starting analysis for project ${input.projectId}`);
+
+      // Analyze image with GPT-4o Vision
+      const analysis = await textDetectionService.analyzeImage(baseImageBuffer);
+
+      console.log(
+        `[analyzeImage] Analysis complete: ${analysis.textRegions.length} text regions, layout: ${analysis.layout}`
+      );
+
+      // Store analysis in database
+      const savedAnalysis = await imageAnalysisRepo.upsert({
+        projectId: input.projectId,
+        textRegions: JSON.stringify(analysis.textRegions),
+        layout: analysis.layout,
+        surfaceTexture: analysis.surfaceTexture,
+        dominantColors: JSON.stringify(analysis.dominantColors),
+        hasUIElements: analysis.hasUIElements,
+        uiElements: analysis.uiElements ? JSON.stringify(analysis.uiElements) : undefined,
+        imageDescription: analysis.imageDescription,
+      });
+
+      return {
+        success: true,
+        analysis: {
+          id: savedAnalysis.id,
+          textRegionCount: analysis.textRegions.length,
+          layout: analysis.layout,
+          surfaceTexture: analysis.surfaceTexture,
+          dominantColors: analysis.dominantColors,
+          hasUIElements: analysis.hasUIElements,
+          uiElements: analysis.uiElements,
+          imageDescription: analysis.imageDescription,
+          textRegions: analysis.textRegions,
+          analyzedAt: savedAnalysis.analyzedAt,
+        },
+      };
+    }),
+
+  /**
+   * Get existing image analysis for a project
+   */
+  getImageAnalysis: publicProcedure
+    .input(projectIdSchema)
+    .query(async ({ ctx, input }) => {
+      const imageAnalysisRepo = new PrismaImageAnalysisRepository(ctx.db);
+      const analysis = await imageAnalysisRepo.findByProjectId(input.projectId);
+
+      if (!analysis) {
+        return { analysis: null };
+      }
+
+      return {
+        analysis: {
+          id: analysis.id,
+          layout: analysis.layout,
+          surfaceTexture: analysis.surfaceTexture,
+          dominantColors: JSON.parse(analysis.dominantColors) as string[],
+          hasUIElements: analysis.hasUIElements,
+          uiElements: analysis.uiElements ? JSON.parse(analysis.uiElements) as string[] : null,
+          imageDescription: analysis.imageDescription,
+          textRegions: JSON.parse(analysis.textRegions) as Array<{
+            text: string;
+            boundingBox: { x: number; y: number; width: number; height: number };
+            confidence: number;
+            role?: string;
+            order?: number;
+          }>,
+          analyzedAt: analysis.analyzedAt,
+        },
+      };
+    }),
+
+  // ───────────────────────────────────────────────────────────────────────────
   // Image Retrieval (direct file store access - simple queries)
   // ───────────────────────────────────────────────────────────────────────────
 
@@ -142,8 +240,16 @@ export const projectRouter = createTRPCRouter({
     .query(async ({ input }) => {
       const fileStore = createFileStore(input.projectId);
       const buffer = await fileStore.getBaseImage();
-      if (!buffer) return { imageBase64: null };
-      return { imageBase64: `data:image/png;base64,${buffer.toString("base64")}` };
+      if (!buffer) return { imageBase64: null, width: null, height: null };
+
+      // Get image dimensions for proper aspect ratio handling
+      const metadata = await sharp(buffer).metadata();
+
+      return {
+        imageBase64: `data:image/png;base64,${buffer.toString("base64")}`,
+        width: metadata.width ?? null,
+        height: metadata.height ?? null,
+      };
     }),
 
   getMask: publicProcedure.input(projectIdSchema).query(async ({ input }) => {

@@ -42,9 +42,11 @@ export function useProjectQueries({ projectId, enabled = true }: UseProjectQueri
   const hasVariants = variants.length > 0;
   const isDemoProject = project?.name?.toLowerCase().includes("demo") ?? false;
 
-  // Image URLs
+  // Image URLs and dimensions
   const baseImageUrl = baseImageQuery.data?.imageBase64 ?? null;
   const maskUrl = maskQuery.data?.maskBase64 ?? null;
+  const baseImageWidth = baseImageQuery.data?.width ?? null;
+  const baseImageHeight = baseImageQuery.data?.height ?? null;
 
   // Refetch functions
   const refetchAll = async () => {
@@ -73,9 +75,11 @@ export function useProjectQueries({ projectId, enabled = true }: UseProjectQueri
     isDemoProject,
     isLoading: projectQuery.isLoading,
 
-    // Image URLs
+    // Image URLs and dimensions
     baseImageUrl,
     maskUrl,
+    baseImageWidth,
+    baseImageHeight,
 
     // Actions
     refetchProject: projectQuery.refetch,

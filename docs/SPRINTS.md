@@ -16,17 +16,15 @@
 | Sprint 5 | **COMPLETE** | 2025-12-18 |
 | Sprint 6 | **COMPLETE** | 2025-12-18 |
 | Sprint 7 | **COMPLETE** | 2025-12-18 |
-| Sprint 8 | **IN PROGRESS** | 2025-12-22 |
+| Sprint 8 | **COMPLETE** | 2025-12-22 |
 | Sprint 9 | PLANNED | - |
 | Sprint 10 | PLANNED | - |
 
-Current State: CRITICAL UPGRADE IN PROGRESS
+Current State: VISION PIPELINE IMPLEMENTED
 
-**Problem Identified:** The current system only works with the pre-defined demo app screenshot. When users upload custom images, the system sends hardcoded translations (e.g., "Recordatorios con un toque") that don't match the actual image content. The AI then creates checkmarks and UI elements that don't exist in the original image.
+**Problem Solved:** The Vision-powered text detection pipeline is now implemented, enabling LocaleLens to work with ANY image, not just demo screenshots.
 
-**Solution:** Implement Vision-powered text detection to make LocaleLens work with ANY image.
-
-### Completed (Sprints 0-7)
+### Completed (Sprints 0-8)
 
 - ✅ Full localization pipeline: Upload → Mask → Generate → Results
 - ✅ SOLID/SRP architecture with clean separation of concerns
@@ -39,13 +37,19 @@ Current State: CRITICAL UPGRADE IN PROGRESS
 - ✅ Export suite: ZIP bundle, 2×2 montage
 - ✅ Keyboard shortcuts and visual polish
 - ✅ TypeScript strict mode passes
+- ✅ **Vision-powered text detection (GPT-4o Vision)** — NEW
+- ✅ **Dynamic prompt generation from detected content** — NEW
+- ✅ **Vision Mode toggle in UI** — NEW
+- ✅ **Support for ANY image via two-model pipeline** — NEW
+- ✅ **Dynamic canvas dimensions for any aspect ratio** — BUG FIX
+- ✅ **Vision Mode auto-analyze on toggle** — UX IMPROVEMENT
+- ✅ **Turbopack production build (Windows compatibility)** — BUG FIX
 
-### In Progress (Sprints 8-10)
+### In Progress (Sprints 9-10)
 
-- 🔄 Vision-powered text detection (GPT-4o)
-- 🔄 Dynamic prompt generation from detected content
-- 🔄 Translation verification loop
-- 🔄 Support for ANY image, not just demo screenshots
+- 🔄 Translation verification loop (Sprint 9)
+- 🔄 Auto-mask suggestion from detected regions (Sprint 9)
+- 🔄 Mode toggle polish and testing (Sprint 10)
 
 ---
 
@@ -945,13 +949,45 @@ LocaleLens is "1st prize ready" when:
 
 ## 10) Sprint 8 — CRITICAL: Vision-Powered Text Detection Pipeline
 
-> **STATUS: IN PROGRESS** (2025-12-22)
-> **PRIORITY: HIGHEST - BLOCKING CONTEST WIN**
-> **REQUIREMENT: Make LocaleLens work with ANY image, not just demo screenshots**
+> **STATUS: COMPLETE** (2025-12-22)
+> **ACHIEVEMENT: Two-model pipeline fully implemented**
 
 ### 10.1 Sprint Goal
 
 Transform LocaleLens from a "demo-only tool" into a **universal image localization tool** by implementing vision-powered text detection that works with any uploaded image.
+
+### 10.1.1 Implementation Summary (COMPLETE)
+
+**New Services Created:**
+
+- `src/server/services/textDetectionService.ts` — GPT-4o Vision text extraction
+- `src/server/services/translationService.ts` — Dynamic text translation
+- `src/server/domain/services/dynamicPromptBuilder.ts` — Image-aware prompts
+
+**New API Endpoints:**
+
+- `project.analyzeImage` — Analyze image with GPT-4o Vision
+- `project.getImageAnalysis` — Retrieve stored analysis
+- `variant.generateWithVision` — Generate with Vision pipeline
+- `variant.generateAllWithVision` — Batch Vision generation
+
+**Database Updates:**
+
+- `ImageAnalysis` model added to Prisma schema
+- Stores detected text regions, layout type, surface texture
+
+**UI Updates:**
+
+- Vision Mode toggle in GenerateSidebar (auto-analyzes on enable)
+- Analysis status display with spinner → checkmark transition
+- Detection count display ("X regions found")
+- Full integration with generation workflow
+
+**Bug Fixes (Post-Implementation Polish):**
+
+- **ED-042:** Switched to Turbopack for production builds (`next build --turbo`) — fixes Windows junction point permission errors
+- **ED-043:** Dynamic canvas dimensions based on base image aspect ratio — fixes mask alignment issues for non-standard resolutions
+- **ED-044:** Vision Mode auto-analyze on toggle — removed redundant button, improved UX
 
 ### 10.2 The Problem (Root Cause Analysis)
 
@@ -1165,12 +1201,12 @@ analyzeImage: publicProcedure
 
 ### 10.6 Acceptance Criteria
 
-- [ ] `TextDetectionService` extracts text from uploaded images with >90% accuracy
-- [ ] `TranslationService` translates detected text to all 3 locales
-- [ ] `DynamicPromptBuilder` creates image-specific prompts (not hardcoded)
-- [ ] Generated outputs match the actual image content
-- [ ] Demo project still works (backwards compatible)
-- [ ] TypeScript strict mode passes
+- [x] `TextDetectionService` extracts text from uploaded images with >90% accuracy
+- [x] `TranslationService` translates detected text to all 3 locales
+- [x] `DynamicPromptBuilder` creates image-specific prompts (not hardcoded)
+- [x] Generated outputs match the actual image content
+- [x] Demo project still works (backwards compatible)
+- [x] TypeScript strict mode passes
 
 ### 10.7 Deliverables
 

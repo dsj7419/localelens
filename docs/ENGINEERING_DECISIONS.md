@@ -1129,6 +1129,228 @@ type GenerationMode = "demo" | "vision";
 
 ---
 
+### ED-041: Sprint 8 Vision Pipeline Implementation
+
+**Decision:** Complete implementation of the two-model Vision pipeline with full type safety
+
+**Date:** 2025-12-22
+
+**Implementation Files Created:**
+
+```text
+src/server/services/
+├── textDetectionService.ts    # GPT-4o Vision text extraction (477 lines)
+└── translationService.ts      # GPT-4o translation with length constraints (363 lines)
+
+src/server/domain/services/
+└── dynamicPromptBuilder.ts    # Layout-aware prompt templates (426 lines)
+```
+
+**Key Interfaces:**
+
+```typescript
+// TextDetectionService
+interface ITextDetectionService {
+  analyzeImage(imageBuffer: Buffer): Promise<ImageAnalysis>;
+}
+
+// TranslationService
+interface ITranslationService {
+  translateTexts(input: TranslationInput): Promise<TranslationResult>;
+}
+
+// DynamicPromptBuilder
+interface IDynamicPromptBuilder {
+  buildPrompt(input: DynamicPromptInput): DynamicPromptResult;
+}
+```
+
+**Database Schema Added:**
+
+```prisma
+model ImageAnalysis {
+  id             String   @id @default(cuid())
+  projectId      String   @unique
+  textRegions    String   // JSON array of TextRegion objects
+  layout         String
+  surfaceTexture String
+  dominantColors String
+  hasUIElements  Boolean  @default(false)
+  uiElements     String?
+  imageDescription String
+  analyzedAt     DateTime @default(now())
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+```
+
+**tRPC Endpoints Added:**
+
+- `project.analyzeImage` — Analyze image with GPT-4o Vision, store results
+- `project.getImageAnalysis` — Retrieve stored analysis
+- `variant.generateWithVision` — Single locale Vision-powered generation
+- `variant.generateAllWithVision` — Batch Vision-powered generation
+
+**UI Changes:**
+
+- Vision Mode toggle (purple, with "NEW" badge) in GenerateSidebar
+- "Analyze Image" button with loading state
+- Detection count display ("Found X text regions")
+- Toggle between Demo Mode and Vision Mode
+
+**Architectural Compliance:**
+
+- **SRP**: Each service has single responsibility (detect, translate, build prompt)
+- **OCP**: New services extend system without modifying existing code
+- **LSP**: Services implement interfaces, are substitutable
+- **ISP**: Small, focused interfaces (ITextDetectionService, ITranslationService, etc.)
+- **DIP**: High-level modules depend on abstractions via factory functions
+
+**Trade-offs:**
+
+- Additional API calls increase latency (~2-3 seconds for analysis)
+- Analysis stored in database for reuse (no re-analysis needed)
+- Vision Mode is opt-in toggle, Demo Mode remains default for demo projects
+
+**Impact:** LocaleLens now supports ANY image, not just the demo screenshot. Universal localization capability achieved.
+
+---
+
+### ED-042: Turbopack for Production Builds
+
+**Decision:** Use `next build --turbo` instead of `next build` for production builds
+
+**Date:** 2025-12-22
+
+**Problem:**
+The legacy webpack builder fails on Windows with:
+
+```text
+glob error [Error: EPERM: operation not permitted, scandir 'C:\Users\...\Application Data']
+```
+
+This is a Windows-specific issue where webpack's glob implementation tries to traverse legacy junction points (`Application Data` → `AppData\Roaming`) that have restricted permissions.
+
+**Solution:**
+Switch to Turbopack for production builds:
+
+```json
+{
+  "scripts": {
+    "build": "next build --turbo"
+  }
+}
+```
+
+**Rationale:**
+
+- Turbopack doesn't have this issue
+- Next.js 15.5+ has stable Turbopack support
+- Faster builds (~4 seconds vs 15+ seconds)
+- Consistent with dev mode (`next dev --turbo`)
+
+**Impact:** Production builds now work on Windows without permission errors.
+
+---
+
+### ED-043: Dynamic Canvas Dimensions for Any Aspect Ratio
+
+**Decision:** Calculate canvas dimensions dynamically based on base image aspect ratio
+
+**Date:** 2025-12-22
+
+**Problem:**
+The mask canvas was fixed at 540×960 pixels regardless of base image dimensions. When users uploaded images with different aspect ratios:
+
+1. Base image displayed with letterboxing (`object-contain`)
+2. User drew mask on 540×960 canvas
+3. Mask resized to base image dimensions using `fit: "fill"` (distortion!)
+4. On Generate step, mask didn't align with image
+
+**Solution:**
+Added `calculateCanvasDimensions()` function in `page.tsx`:
+
+```typescript
+function calculateCanvasDimensions(
+  baseWidth: number | null,
+  baseHeight: number | null
+): { width: number; height: number } {
+  if (!baseWidth || !baseHeight) {
+    return { width: MAX_CANVAS_WIDTH, height: MAX_CANVAS_HEIGHT };
+  }
+
+  const baseAspectRatio = baseWidth / baseHeight;
+  const containerAspectRatio = MAX_CANVAS_WIDTH / MAX_CANVAS_HEIGHT;
+
+  if (baseAspectRatio > containerAspectRatio) {
+    // Image is wider - fit to width
+    return { width: MAX_CANVAS_WIDTH, height: Math.round(MAX_CANVAS_WIDTH / baseAspectRatio) };
+  } else {
+    // Image is taller - fit to height
+    return { height: MAX_CANVAS_HEIGHT, width: Math.round(MAX_CANVAS_HEIGHT * baseAspectRatio) };
+  }
+}
+```
+
+**Changes:**
+
+- `project.getBaseImage` now returns `{ imageBase64, width, height }`
+- `useProjectQueries` exposes `baseImageWidth` and `baseImageHeight`
+- Canvas dimensions calculated via `useMemo` based on base image dimensions
+- All step canvases use dynamic dimensions
+
+**Impact:** LocaleLens now handles ANY image resolution correctly. Masks align perfectly with base images.
+
+---
+
+### ED-044: Vision Mode Auto-Analyze on Toggle
+
+**Decision:** Automatically trigger image analysis when Vision Mode is enabled
+
+**Date:** 2025-12-22
+
+**Problem:**
+Original UX had both a toggle AND a separate "Analyze Image" button:
+
+1. User enables Vision Mode toggle
+2. User clicks "Analyze Image" button
+3. Analysis runs
+
+This was confusing - why have both?
+
+**Solution:**
+Removed the manual button. Analysis triggers automatically via `useEffect`:
+
+```typescript
+useEffect(() => {
+  if (
+    visionModeEnabled &&
+    !hasAnalysis &&
+    !analyzeImageMutation.isPending &&
+    queries.hasBaseImage &&
+    !imageAnalysisQuery.isLoading &&
+    !imageAnalysisQuery.data?.analysis
+  ) {
+    analyzeImageMutation.mutate({ projectId });
+  }
+}, [visionModeEnabled, hasAnalysis, ...]);
+```
+
+**UI Changes:**
+
+- Removed "Analyze Image" button from GenerateSidebar
+- Added "Analyzing Image..." spinner state
+- Shows "Text Detected - X regions found" when complete
+- Clear status messaging at each state
+
+**Trade-offs:**
+
+- Analysis starts immediately when toggle is enabled (might surprise user)
+- If user toggles off/on, won't re-analyze (existing analysis reused)
+
+**Impact:** Simpler UX. One toggle does everything.
+
+---
+
 ## How to Add Decisions
 
 When making a decision not covered by the spec:

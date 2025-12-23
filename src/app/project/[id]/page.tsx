@@ -7,8 +7,9 @@
 
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { api } from "~/trpc/react";
 
 import { ScrollArea } from "~/components/ui/scroll-area";
 import { Badge } from "~/components/ui/badge";
@@ -38,9 +39,41 @@ import {
 } from "~/hooks";
 import { SUPPORTED_LOCALES, type LocaleId } from "~/server/domain/value-objects/locale";
 
-// Canvas dimensions
-const CANVAS_WIDTH = 540;
-const CANVAS_HEIGHT = 960;
+// Canvas container dimensions (max size)
+const MAX_CANVAS_WIDTH = 540;
+const MAX_CANVAS_HEIGHT = 960;
+
+/**
+ * Calculate canvas dimensions that preserve base image aspect ratio
+ * while fitting within the max container size.
+ */
+function calculateCanvasDimensions(
+  baseWidth: number | null,
+  baseHeight: number | null
+): { width: number; height: number } {
+  // Default to max dimensions if no base image
+  if (!baseWidth || !baseHeight) {
+    return { width: MAX_CANVAS_WIDTH, height: MAX_CANVAS_HEIGHT };
+  }
+
+  const baseAspectRatio = baseWidth / baseHeight;
+  const containerAspectRatio = MAX_CANVAS_WIDTH / MAX_CANVAS_HEIGHT;
+
+  let width: number;
+  let height: number;
+
+  if (baseAspectRatio > containerAspectRatio) {
+    // Image is wider than container - fit to width
+    width = MAX_CANVAS_WIDTH;
+    height = Math.round(MAX_CANVAS_WIDTH / baseAspectRatio);
+  } else {
+    // Image is taller than container - fit to height
+    height = MAX_CANVAS_HEIGHT;
+    width = Math.round(MAX_CANVAS_HEIGHT * baseAspectRatio);
+  }
+
+  return { width, height };
+}
 
 export default function ProjectPage() {
   const params = useParams();
@@ -77,8 +110,73 @@ export default function ProjectPage() {
   const [currentGeneratingLocale, setCurrentGeneratingLocale] = useState<LocaleId | null>(null);
   const [streamingEnabled, setStreamingEnabled] = useState(false);
 
+  // Vision pipeline state
+  const [visionModeEnabled, setVisionModeEnabled] = useState(false);
+  const [detectedTextCount, setDetectedTextCount] = useState(0);
+  const [hasAnalysis, setHasAnalysis] = useState(false);
+
+  // Calculate canvas dimensions based on base image aspect ratio
+  const canvasDimensions = useMemo(
+    () => calculateCanvasDimensions(queries.baseImageWidth, queries.baseImageHeight),
+    [queries.baseImageWidth, queries.baseImageHeight]
+  );
+
   // Streaming generation hook for gpt-image-1.5 progressive preview
   const streaming = useStreamingGeneration();
+
+  // Vision pipeline query (check if analysis exists)
+  const imageAnalysisQuery = api.project.getImageAnalysis.useQuery(
+    { projectId },
+    { enabled: visionModeEnabled }
+  );
+
+  // Vision pipeline mutations
+  const analyzeImageMutation = api.project.analyzeImage.useMutation({
+    onSuccess: (data) => {
+      if (data.success && data.analysis) {
+        setDetectedTextCount(data.analysis.textRegionCount);
+        setHasAnalysis(true);
+      }
+    },
+  });
+
+  // Update state when analysis is loaded from query
+  useEffect(() => {
+    if (imageAnalysisQuery.data?.analysis) {
+      setDetectedTextCount(imageAnalysisQuery.data.analysis.textRegions.length);
+      setHasAnalysis(true);
+    }
+  }, [imageAnalysisQuery.data]);
+
+  // Auto-analyze when Vision Mode is enabled (remove need for separate button)
+  useEffect(() => {
+    if (
+      visionModeEnabled &&
+      !hasAnalysis &&
+      !analyzeImageMutation.isPending &&
+      queries.hasBaseImage &&
+      !imageAnalysisQuery.isLoading &&
+      !imageAnalysisQuery.data?.analysis
+    ) {
+      // No existing analysis, trigger one automatically
+      analyzeImageMutation.mutate({ projectId });
+    }
+  }, [visionModeEnabled, hasAnalysis, queries.hasBaseImage, imageAnalysisQuery.data, imageAnalysisQuery.isLoading, analyzeImageMutation, projectId]);
+
+  // Vision pipeline generation mutation
+  const generateWithVisionMutation = api.variant.generateAllWithVision.useMutation({
+    onSuccess: (data) => {
+      setGenerationProgress(100);
+      void queries.refetchProject();
+      workflow.goToResults();
+      if (data.successCount > 0) {
+        results.selectFirstVariant(selectedLocales);
+      }
+    },
+    onError: () => {
+      setGenerationProgress(0);
+    },
+  });
 
   // ─────────────────────────────────────────────────────────────────────────────
   // Mutations
@@ -134,6 +232,17 @@ export default function ProjectPage() {
     setIsDemoMode(false);
     setGenerationProgress(0);
 
+    // Vision pipeline mode - use the two-model pipeline
+    if (visionModeEnabled) {
+      generateWithVisionMutation.mutate({
+        projectId,
+        locales: selectedLocales,
+        pixelPerfect: true,
+        ultraStrict: false,
+      });
+      return;
+    }
+
     if (streamingEnabled && selectedLocales.length === 1) {
       // Use streaming endpoint for single locale (best streaming experience)
       const locale = selectedLocales[0]!;
@@ -183,7 +292,7 @@ export default function ProjectPage() {
       // Use existing tRPC mutation (non-streaming)
       mutations.handleGenerate(selectedLocales);
     }
-  }, [streamingEnabled, selectedLocales, projectId, streaming, mutations, queries, workflow, results]);
+  }, [visionModeEnabled, streamingEnabled, selectedLocales, projectId, streaming, mutations, queries, workflow, results, generateWithVisionMutation]);
 
   const handleDemoMode = useCallback(() => {
     setIsDemoMode(true);
@@ -295,12 +404,17 @@ export default function ProjectPage() {
         return (
           <GenerateStepSidebar
             selectedLocales={selectedLocales}
-            isGenerating={mutations.isGenerating || streaming.isStreaming}
+            isGenerating={mutations.isGenerating || streaming.isStreaming || generateWithVisionMutation.isPending}
             isDemoMode={isDemoMode}
             progress={generationProgress}
             isDemoProject={queries.isDemoProject}
             streamingEnabled={streamingEnabled}
             onStreamingChange={setStreamingEnabled}
+            visionModeEnabled={visionModeEnabled}
+            onVisionModeChange={setVisionModeEnabled}
+            isAnalyzing={analyzeImageMutation.isPending}
+            hasAnalysis={hasAnalysis}
+            detectedTextCount={detectedTextCount}
             onLocaleToggle={handleLocaleToggle}
             onSelectAll={() => setSelectedLocales([...SUPPORTED_LOCALES])}
             onClearAll={() => setSelectedLocales([])}
@@ -337,8 +451,8 @@ export default function ProjectPage() {
           <UploadStepCanvas
             hasBaseImage={queries.hasBaseImage}
             baseImageUrl={queries.baseImageUrl}
-            canvasWidth={CANVAS_WIDTH}
-            canvasHeight={CANVAS_HEIGHT}
+            canvasWidth={canvasDimensions.width}
+            canvasHeight={canvasDimensions.height}
           />
         );
 
@@ -350,8 +464,8 @@ export default function ProjectPage() {
             maskUrl={queries.maskUrl}
             tool={maskEditor.activeTool}
             brushSize={maskEditor.brushSize}
-            width={CANVAS_WIDTH}
-            height={CANVAS_HEIGHT}
+            width={canvasDimensions.width}
+            height={canvasDimensions.height}
             onStateChange={maskEditor.handleStateChange}
           />
         );
@@ -362,8 +476,8 @@ export default function ProjectPage() {
             baseImageUrl={queries.baseImageUrl}
             maskUrl={queries.maskUrl}
             selectedLocales={selectedLocales}
-            canvasWidth={CANVAS_WIDTH}
-            canvasHeight={CANVAS_HEIGHT}
+            canvasWidth={canvasDimensions.width}
+            canvasHeight={canvasDimensions.height}
             isGenerating={mutations.isGenerating || streaming.isStreaming}
             currentLocale={currentGeneratingLocale}
             // Streaming props
@@ -385,8 +499,8 @@ export default function ProjectPage() {
             variantImageUrl={variantImage.imageUrl}
             overlayImageUrl={variantImage.overlayUrl}
             isLoadingVariant={variantImage.isLoading}
-            canvasWidth={CANVAS_WIDTH}
-            canvasHeight={CANVAS_HEIGHT}
+            canvasWidth={canvasDimensions.width}
+            canvasHeight={canvasDimensions.height}
           />
         );
     }

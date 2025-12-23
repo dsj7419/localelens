@@ -3,7 +3,7 @@
 import { Button } from "~/components/ui/button";
 import { Badge } from "~/components/ui/badge";
 import { Separator } from "~/components/ui/separator";
-import { Sparkles, PlayCircle, Check, Zap, Info } from "lucide-react";
+import { Sparkles, PlayCircle, Check, Zap, Info, Eye, Loader2 } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
@@ -27,6 +27,16 @@ interface GenerateSidebarProps {
   streamingEnabled?: boolean;
   /** Callback when streaming toggle changes */
   onStreamingChange?: (enabled: boolean) => void;
+  /** Enable Vision pipeline for universal image support */
+  visionModeEnabled?: boolean;
+  /** Callback when Vision mode toggle changes */
+  onVisionModeChange?: (enabled: boolean) => void;
+  /** Whether image analysis is in progress */
+  isAnalyzing?: boolean;
+  /** Whether image has been analyzed */
+  hasAnalysis?: boolean;
+  /** Number of detected text regions */
+  detectedTextCount?: number;
   onLocaleToggle: (locale: LocaleId) => void;
   onSelectAll: () => void;
   onClearAll: () => void;
@@ -48,6 +58,11 @@ export function GenerateSidebar({
   progress,
   streamingEnabled = false,
   onStreamingChange,
+  visionModeEnabled = false,
+  onVisionModeChange,
+  isAnalyzing = false,
+  hasAnalysis = false,
+  detectedTextCount = 0,
   onLocaleToggle,
   onSelectAll,
   onClearAll,
@@ -187,6 +202,97 @@ export function GenerateSidebar({
               <p className="text-xs text-muted-foreground">
                 Progressive preview enabled - additional cost per generation
               </p>
+            )}
+          </div>
+        )}
+
+        <Separator />
+
+        {/* Vision Mode Toggle - Universal Image Support */}
+        {onVisionModeChange && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Eye className="h-4 w-4 text-purple-500" />
+                <span className="text-sm font-medium">Vision Mode</span>
+                <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                  NEW
+                </Badge>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger>
+                      <Info className="h-3.5 w-3.5 text-muted-foreground" />
+                    </TooltipTrigger>
+                    <TooltipContent side="right" className="max-w-60">
+                      <p className="text-xs">
+                        Uses GPT-4o Vision to detect text in your image, then translates
+                        dynamically. Works with ANY image, not just demo screenshots.
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+              <button
+                onClick={() => onVisionModeChange(!visionModeEnabled)}
+                disabled={isGenerating || isAnalyzing}
+                className={`
+                  relative inline-flex h-5 w-9 items-center rounded-full transition-colors
+                  ${visionModeEnabled ? "bg-purple-500" : "bg-muted"}
+                  ${isGenerating || isAnalyzing ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}
+                `}
+              >
+                <span
+                  className={`
+                    inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform
+                    ${visionModeEnabled ? "translate-x-4" : "translate-x-0.5"}
+                  `}
+                />
+              </button>
+            </div>
+
+            {/* Vision Mode Status */}
+            {visionModeEnabled && (
+              <div className="space-y-2">
+                {/* Analysis in Progress */}
+                {isAnalyzing && (
+                  <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-purple-500/10 border border-purple-500/20">
+                    <Loader2 className="h-4 w-4 text-purple-500 animate-spin" />
+                    <div className="flex-1">
+                      <p className="text-xs font-medium text-purple-600 dark:text-purple-400">
+                        Analyzing Image...
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Detecting text with GPT-4o Vision
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Analysis Complete */}
+                {!isAnalyzing && hasAnalysis && (
+                  <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-purple-500/10 border border-purple-500/20">
+                    <Check className="h-4 w-4 text-purple-500" />
+                    <div className="flex-1">
+                      <p className="text-xs font-medium text-purple-600 dark:text-purple-400">
+                        Text Detected
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {detectedTextCount} region{detectedTextCount !== 1 ? "s" : ""} found
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Info text */}
+                <p className="text-xs text-muted-foreground">
+                  {hasAnalysis
+                    ? "Ready to generate with dynamic translations"
+                    : isAnalyzing
+                    ? "Please wait while we analyze your image..."
+                    : "Enable to auto-detect and translate text"
+                  }
+                </p>
+              </div>
             )}
           </div>
         )}

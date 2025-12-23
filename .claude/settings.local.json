@@ -24,7 +24,9 @@
       "WebSearch",
       "WebFetch(domain:ui.shadcn.com)",
       "Bash(cat:*)",
-      "WebFetch(domain:platform.openai.com)"
+      "WebFetch(domain:platform.openai.com)",
+      "Bash(timeout 15 pnpm dev:*)",
+      "Bash(DEBUG=*)"
     ]
   }
 }

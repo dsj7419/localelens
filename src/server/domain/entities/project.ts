@@ -45,12 +45,29 @@ export interface Variant {
 }
 
 /**
+ * Image Analysis entity (Vision-powered text detection results)
+ */
+export interface ImageAnalysisEntity {
+  id: string;
+  projectId: string;
+  textRegions: string; // JSON string of TextRegion[]
+  layout: string; // ImageLayout type
+  surfaceTexture: string;
+  dominantColors: string; // JSON string of string[]
+  hasUIElements: boolean;
+  uiElements: string | null; // JSON string of string[]
+  imageDescription: string;
+  analyzedAt: Date;
+}
+
+/**
  * Project with all related entities (aggregate)
  */
 export interface ProjectAggregate {
   project: Project;
   mask: Mask | null;
   variants: Variant[];
+  imageAnalysis: ImageAnalysisEntity | null;
 }
 
 /**

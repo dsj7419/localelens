@@ -17,7 +17,7 @@ LocaleLens is a locally-runnable tool for localizing marketing visuals using Ope
 pnpm install          # Install dependencies
 pnpm db:push          # Initialize/sync SQLite database (required before first run)
 pnpm dev              # Start dev server at http://localhost:3000
-pnpm build            # Production build
+pnpm build            # Production build (uses Turbopack for Windows compatibility)
 pnpm typecheck        # TypeScript validation
 pnpm db:studio        # Open Prisma Studio for database inspection
 pnpm demo:seed        # Load pre-generated demo assets for offline testing
@@ -26,6 +26,7 @@ pnpm demo:seed        # Load pre-generated demo assets for offline testing
 ## Architecture
 
 ### Tech Stack
+
 - **Framework:** Next.js 15 (App Router)
 - **API:** tRPC v11 (type-safe RPC)
 - **Database:** Prisma + SQLite
@@ -34,7 +35,8 @@ pnpm demo:seed        # Load pre-generated demo assets for offline testing
 - **AI:** OpenAI gpt-image-1.5
 
 ### Directory Structure
-```
+
+```text
 src/
 ├── app/                    # Next.js App Router pages
 │   ├── page.tsx            # Homepage with project list
@@ -73,15 +75,18 @@ src/
 4. **SSE Streaming**: `/api/variant/stream` endpoint provides progressive image previews during generation. Events: `start`, `partial`, `processing`, `complete`, `error`.
 
 5. **Two-Model Pipeline** (NEW - Sprint 8+):
-   ```
+
+   ```text
    GPT-4o Vision (Inspector) → GPT-4o (Translator) → gpt-image-1.5 (Artist) → GPT-4o Vision (Verifier)
    ```
+
    - **TextDetectionService**: Extracts text regions from any image using GPT-4o Vision
    - **TranslationService**: Translates detected text to target locales
    - **DynamicPromptBuilder**: Builds image-specific prompts (not hardcoded)
    - **VerificationService**: Re-reads generated images to verify translation accuracy
 
 ### Database Schema (Prisma)
+
 - **Project**: id, name, baseImagePath, timestamps
 - **Mask**: id, projectId (unique), maskImagePath
 - **Variant**: id, projectId, locale, prompt, outputImagePath, driftScore, driftStatus, modelUsed
@@ -89,20 +94,24 @@ src/
 ## Key Implementation Details
 
 ### OpenAI Image Generation
+
 - Primary model: `gpt-image-1.5` (contest requirement)
 - Parameters: `quality: "high"`, `background: "opaque"`, `size: "auto"`, `output_format: "png"`
 - Pixel-perfect composite mode: Generated images are composited onto original using mask to guarantee 0% drift outside masked regions
 
 ### Drift Detection
+
 - Algorithm: Euclidean distance in RGB space (threshold: 30 = changed pixel)
 - Score: `(changed pixels outside mask) / (total pixels outside mask) * 100`
 - Thresholds: PASS (≤2%), WARN (2-5%), FAIL (>5%)
 
 ### Mask Handling
+
 - Format: PNG with alpha channel (transparent = editable regions)
 - Auto-resize: Masks are automatically resized to match base image dimensions when saved
 
 ### Supported Locales
+
 - `es-MX` (Spanish) - LTR
 - `fr-CA` (French) - LTR
 - `ar` (Arabic) - RTL
@@ -119,23 +128,51 @@ IMAGE_MODEL_FALLBACK="gpt-image-1"
 ## Important Files
 
 - `src/app/project/[id]/page.tsx` - Main workflow orchestration
-- `src/server/api/routers/variant.ts` - Variant generation pipeline
+- `src/server/api/routers/variant.ts` - Variant generation pipeline (includes Vision mutations)
+- `src/server/api/routers/project.ts` - Project management (includes analyzeImage mutation)
 - `src/server/domain/services/variantGeneration.service.ts` - Core variant logic
-- `src/server/services/openaiImage.ts` - OpenAI client with streaming
-- `src/server/domain/services/localePlan.service.ts` - **CRITICAL**: Currently uses hardcoded translations (being replaced)
-- `docs/ENGINEERING_DECISIONS.md` - 40 documented engineering decisions with rationale
-- `docs/SPRINTS.md` - Sprint planning including Sprints 8-10 for Vision pipeline
+- `src/server/services/openaiImage.ts` - OpenAI gpt-image-1.5 client with streaming
+- `src/server/services/textDetectionService.ts` - GPT-4o Vision text extraction (Sprint 8)
+- `src/server/services/translationService.ts` - Dynamic text translation (Sprint 8)
+- `src/server/domain/services/dynamicPromptBuilder.ts` - Layout-aware prompts (Sprint 8)
+- `docs/ENGINEERING_DECISIONS.md` - 40+ documented engineering decisions with rationale
+- `docs/SPRINTS.md` - Sprint planning (Sprints 0-8 complete, 9-10 planned)
 
-## Critical Issue (Sprint 8 Fix)
+## Vision Pipeline (Sprint 8 - COMPLETE)
 
-**Problem:** The system only works with ONE specific demo image because:
-1. `LocalePlanService` uses hardcoded `LOCALIZED_COPY` translations
-2. Prompts reference "checkmarks", "bullets", "CTA buttons" that don't exist in other images
-3. When users upload custom images, the AI creates phantom UI elements
+**Problem Solved:** The system now works with ANY image, not just demo screenshots.
 
-**Solution (In Progress):** Implement Vision-powered text detection:
-- `TextDetectionService` - Use GPT-4o Vision to detect actual text in images
-- `TranslationService` - Translate detected text dynamically
-- `DynamicPromptBuilder` - Build prompts from actual image content
+**Two-Model Pipeline:**
 
-See `docs/SPRINTS.md` Sprint 8-10 for implementation plan.
+```text
+GPT-4o Vision (Inspector) → GPT-4o (Translator) → gpt-image-1.5 (Artist)
+```
+
+**New Services (Sprint 8):**
+
+- `TextDetectionService` - Extracts text regions with bounding boxes, layout type, style hints
+- `TranslationService` - Translates with length constraints for visual content
+- `DynamicPromptBuilder` - Layout-aware templates (sticky notes, banners, screenshots)
+
+**New API Endpoints:**
+
+- `project.analyzeImage` - Analyze image with GPT-4o Vision
+- `project.getImageAnalysis` - Retrieve stored analysis
+- `variant.generateWithVision` - Single locale Vision generation
+- `variant.generateAllWithVision` - Batch Vision generation
+
+**UI:**
+
+- Vision Mode toggle in Generate step sidebar (auto-analyzes on enable)
+- Analysis status with spinner → checkmark transition
+- Detection count display ("X regions found")
+- Dynamic canvas dimensions for any image aspect ratio
+
+## Current Sprint Status
+
+| Sprint | Status |
+| Sprints 0-8 | **COMPLETE** |
+| Sprint 9 | PLANNED - VerificationService, Auto-mask |
+| Sprint 10 | PLANNED - Final polish, contest submission |
+
+See `docs/SPRINTS.md` for full sprint details and `docs/AI_HANDOFF_PROMPT.md` for AI onboarding.

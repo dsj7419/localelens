@@ -24,11 +24,30 @@ model Project {
     updatedAt     DateTime  @updatedAt
 
     // Relations
-    mask     Mask?
-    variants Variant[]
+    mask          Mask?
+    variants      Variant[]
+    imageAnalysis ImageAnalysis?
 
     @@index([name])
     @@index([createdAt])
+}
+
+/// Vision-powered image analysis results (GPT-4o Vision)
+/// Stores detected text regions, layout type, and metadata for dynamic prompt generation
+model ImageAnalysis {
+    id             String   @id @default(cuid())
+    projectId      String   @unique
+    textRegions    String   // JSON array of TextRegion objects
+    layout         String   // ImageLayout type (app-screenshot, sticky-notes, etc.)
+    surfaceTexture String   // Description of background/surface
+    dominantColors String   // JSON array of color names
+    hasUIElements  Boolean  @default(false)
+    uiElements     String?  // JSON array of UI element descriptions
+    imageDescription String // Overall description of the image
+    analyzedAt     DateTime @default(now())
+
+    // Relations
+    project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 }
 
 /// A mask defining editable regions for a project

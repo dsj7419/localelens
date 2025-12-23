@@ -5,7 +5,7 @@
  * Implements Dependency Inversion - depends on repository interfaces.
  */
 
-import type { PrismaClient, Project as PrismaProject, Mask as PrismaMask, Variant as PrismaVariant } from "../../../../generated/prisma";
+import type { PrismaClient, Project as PrismaProject, Mask as PrismaMask, Variant as PrismaVariant, ImageAnalysis as PrismaImageAnalysis } from "../../../../generated/prisma";
 import type {
   Project,
   Mask,
@@ -223,6 +223,97 @@ export class PrismaVariantRepository implements IVariantRepository {
 }
 
 // =============================================================================
+// Image Analysis Repository Implementation
+// =============================================================================
+
+/**
+ * Image Analysis data structure (matches Prisma model)
+ */
+export interface ImageAnalysisData {
+  id: string;
+  projectId: string;
+  textRegions: string; // JSON string
+  layout: string;
+  surfaceTexture: string;
+  dominantColors: string; // JSON string
+  hasUIElements: boolean;
+  uiElements: string | null;
+  imageDescription: string;
+  analyzedAt: Date;
+}
+
+/**
+ * Input for creating image analysis
+ */
+export interface CreateImageAnalysisInput {
+  projectId: string;
+  textRegions: string;
+  layout: string;
+  surfaceTexture: string;
+  dominantColors: string;
+  hasUIElements: boolean;
+  uiElements?: string;
+  imageDescription: string;
+}
+
+export class PrismaImageAnalysisRepository {
+  constructor(private readonly db: PrismaClient) {}
+
+  async upsert(input: CreateImageAnalysisInput): Promise<ImageAnalysisData> {
+    const result = await this.db.imageAnalysis.upsert({
+      where: { projectId: input.projectId },
+      update: {
+        textRegions: input.textRegions,
+        layout: input.layout,
+        surfaceTexture: input.surfaceTexture,
+        dominantColors: input.dominantColors,
+        hasUIElements: input.hasUIElements,
+        uiElements: input.uiElements ?? null,
+        imageDescription: input.imageDescription,
+        analyzedAt: new Date(),
+      },
+      create: {
+        projectId: input.projectId,
+        textRegions: input.textRegions,
+        layout: input.layout,
+        surfaceTexture: input.surfaceTexture,
+        dominantColors: input.dominantColors,
+        hasUIElements: input.hasUIElements,
+        uiElements: input.uiElements ?? null,
+        imageDescription: input.imageDescription,
+      },
+    });
+    return this.mapToImageAnalysis(result);
+  }
+
+  async findByProjectId(projectId: string): Promise<ImageAnalysisData | null> {
+    const result = await this.db.imageAnalysis.findUnique({
+      where: { projectId },
+    });
+    return result ? this.mapToImageAnalysis(result) : null;
+  }
+
+  async delete(projectId: string): Promise<void> {
+    await this.db.imageAnalysis.deleteMany({ where: { projectId } });
+  }
+
+  private mapToImageAnalysis(data: PrismaImageAnalysis): ImageAnalysisData {
+    return {
+      id: data.id,
+      projectId: data.projectId,
+      textRegions: data.textRegions,
+      layout: data.layout,
+      surfaceTexture: data.surfaceTexture,
+      dominantColors: data.dominantColors,
+      hasUIElements: data.hasUIElements,
+      uiElements: data.uiElements,
+      imageDescription: data.imageDescription,
+      analyzedAt: data.analyzedAt,
+    };
+  }
+}
+
+// =============================================================================
 // Aggregate Repository Implementation
 // =============================================================================
 
@@ -237,6 +328,7 @@ export class PrismaProjectAggregateRepository
       include: {
         mask: true,
         variants: { orderBy: { createdAt: "desc" } },
+        imageAnalysis: true,
       },
     });
 
@@ -269,6 +361,20 @@ export class PrismaProjectAggregateRepository
         modelUsed: v.modelUsed,
         createdAt: v.createdAt,
       })),
+      imageAnalysis: result.imageAnalysis
+        ? {
+            id: result.imageAnalysis.id,
+            projectId: result.imageAnalysis.projectId,
+            textRegions: result.imageAnalysis.textRegions,
+            layout: result.imageAnalysis.layout,
+            surfaceTexture: result.imageAnalysis.surfaceTexture,
+            dominantColors: result.imageAnalysis.dominantColors,
+            hasUIElements: result.imageAnalysis.hasUIElements,
+            uiElements: result.imageAnalysis.uiElements,
+            imageDescription: result.imageAnalysis.imageDescription,
+            analyzedAt: result.imageAnalysis.analyzedAt,
+          }
+        : null,
     };
   }
 }

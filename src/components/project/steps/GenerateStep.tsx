@@ -27,6 +27,16 @@ interface GenerateStepSidebarProps {
   streamingEnabled?: boolean;
   /** Callback when streaming toggle changes */
   onStreamingChange?: (enabled: boolean) => void;
+  /** Enable Vision pipeline for universal image support */
+  visionModeEnabled?: boolean;
+  /** Callback when Vision mode toggle changes */
+  onVisionModeChange?: (enabled: boolean) => void;
+  /** Whether image analysis is in progress */
+  isAnalyzing?: boolean;
+  /** Whether image has been analyzed */
+  hasAnalysis?: boolean;
+  /** Number of detected text regions */
+  detectedTextCount?: number;
   onLocaleToggle: (locale: LocaleId) => void;
   onSelectAll: () => void;
   onClearAll: () => void;
@@ -60,6 +70,11 @@ export function GenerateStepSidebar({
   isDemoProject,
   streamingEnabled,
   onStreamingChange,
+  visionModeEnabled,
+  onVisionModeChange,
+  isAnalyzing,
+  hasAnalysis,
+  detectedTextCount,
   onLocaleToggle,
   onSelectAll,
   onClearAll,
@@ -75,6 +90,11 @@ export function GenerateStepSidebar({
       progress={progress}
       streamingEnabled={streamingEnabled}
       onStreamingChange={onStreamingChange}
+      visionModeEnabled={visionModeEnabled}
+      onVisionModeChange={onVisionModeChange}
+      isAnalyzing={isAnalyzing}
+      hasAnalysis={hasAnalysis}
+      detectedTextCount={detectedTextCount}
       onLocaleToggle={onLocaleToggle}
       onSelectAll={onSelectAll}
       onClearAll={onClearAll}
