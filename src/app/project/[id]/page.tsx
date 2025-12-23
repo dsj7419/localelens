@@ -342,17 +342,7 @@ export default function ProjectPage() {
     setIsDemoMode(false);
     setGenerationProgress(0);
 
-    // Vision pipeline mode - use the two-model pipeline
-    if (visionModeEnabled) {
-      generateWithVisionMutation.mutate({
-        projectId,
-        locales: selectedLocales,
-        pixelPerfect: true,
-        ultraStrict: false,
-      });
-      return;
-    }
-
+    // Streaming mode (supports Vision pipeline via visionMode parameter)
     if (streamingEnabled && selectedLocales.length === 1) {
       // Use streaming endpoint for single locale (best streaming experience)
       const locale = selectedLocales[0]!;
@@ -362,7 +352,9 @@ export default function ProjectPage() {
         projectId,
         locale,
         pixelPerfect: true,
-        partialImages: 2,
+        partialImages: 3, // Max allowed by OpenAI for best streaming preview
+        visionMode: visionModeEnabled,
+        enhancedPrompt: true,
       });
 
       if (result) {
@@ -377,6 +369,10 @@ export default function ProjectPage() {
       // Sequential streaming for multiple locales
       for (let i = 0; i < selectedLocales.length; i++) {
         const locale = selectedLocales[i]!;
+
+        // Reset streaming state before each locale for clean UI
+        streaming.reset();
+
         setCurrentGeneratingLocale(locale);
         setGenerationProgress(Math.round((i / selectedLocales.length) * 100));
 
@@ -384,7 +380,9 @@ export default function ProjectPage() {
           projectId,
           locale,
           pixelPerfect: true,
-          partialImages: 2,
+          partialImages: 3, // Max allowed by OpenAI for best streaming preview
+          visionMode: visionModeEnabled,
+          enhancedPrompt: true,
         });
 
         if (!result) {
@@ -398,8 +396,16 @@ export default function ProjectPage() {
       await queries.refetchProject();
       workflow.goToResults();
       results.selectFirstVariant(selectedLocales);
+    } else if (visionModeEnabled) {
+      // Non-streaming Vision pipeline mode
+      generateWithVisionMutation.mutate({
+        projectId,
+        locales: selectedLocales,
+        pixelPerfect: true,
+        ultraStrict: false,
+      });
     } else {
-      // Use existing tRPC mutation (non-streaming)
+      // Legacy: Use existing tRPC mutation (non-streaming, non-Vision)
       mutations.handleGenerate(selectedLocales);
     }
   }, [visionModeEnabled, streamingEnabled, selectedLocales, projectId, streaming, mutations, queries, workflow, results, generateWithVisionMutation]);

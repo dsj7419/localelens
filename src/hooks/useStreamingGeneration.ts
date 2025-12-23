@@ -35,6 +35,8 @@ export interface StreamingGenerationOptions {
   locale: LocaleId;
   pixelPerfect?: boolean;
   partialImages?: number;
+  visionMode?: boolean; // Enable Vision pipeline (GPT-4o analysis + translation)
+  enhancedPrompt?: boolean; // Use PromptEngineeringService (Sprint 10)
 }
 
 export interface StreamingProgress {
@@ -162,7 +164,14 @@ export function useStreamingGeneration(): UseStreamingGenerationReturn {
 
   const generate = useCallback(
     async (options: StreamingGenerationOptions): Promise<StreamingResult | null> => {
-      const { projectId, locale, pixelPerfect = true, partialImages: partialImagesCount = 2 } = options;
+      const {
+        projectId,
+        locale,
+        pixelPerfect = true,
+        partialImages: partialImagesCount = 2,
+        visionMode = true, // Default to Vision pipeline
+        enhancedPrompt = true, // Default to PromptEngineeringService
+      } = options;
 
       // Reset state
       reset();
@@ -183,6 +192,8 @@ export function useStreamingGeneration(): UseStreamingGenerationReturn {
             locale,
             pixelPerfect,
             partialImages: partialImagesCount,
+            visionMode,
+            enhancedPrompt,
           }),
           signal: abortControllerRef.current.signal,
         });

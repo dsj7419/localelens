@@ -19,12 +19,17 @@ import {
   PrismaProjectRepository,
   PrismaMaskRepository,
   PrismaVariantRepository,
+  PrismaImageAnalysisRepository,
 } from "~/server/infrastructure/repositories/prisma.project.repository";
 import { createFileStore } from "~/server/services/fileStore";
 import { getOpenAIImageService } from "~/server/services/openaiImage";
 import { getLocalePlanService } from "~/server/domain/services/localePlan.service";
 import { getVariantGenerationService } from "~/server/domain/services/variantGeneration.service";
 import { getImageProcessingService } from "~/server/services/imageProcessingService";
+import { getTextDetectionService, type ImageAnalysis, type TextRegion } from "~/server/services/textDetectionService";
+import { getTranslationService } from "~/server/services/translationService";
+import { getDynamicPromptBuilder } from "~/server/domain/services/dynamicPromptBuilder";
+import { getPromptEngineeringService } from "~/server/services/promptEngineeringService";
 import { SUPPORTED_LOCALES, type LocaleId, getLocaleMetadata } from "~/server/domain/value-objects/locale";
 import type { StreamingEvent } from "~/server/services/openaiImage";
 
@@ -34,6 +39,8 @@ const streamingRequestSchema = z.object({
   locale: z.enum(SUPPORTED_LOCALES),
   pixelPerfect: z.boolean().default(true),
   partialImages: z.number().min(0).max(3).default(2),
+  visionMode: z.boolean().default(true), // Enable Vision pipeline by default
+  enhancedPrompt: z.boolean().default(true), // Use PromptEngineeringService (Sprint 10)
 });
 
 /**
@@ -73,7 +80,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { projectId, locale, pixelPerfect, partialImages } = input;
+  const { projectId, locale, pixelPerfect, partialImages, visionMode, enhancedPrompt } = input;
 
   // Create readable stream for SSE
   const stream = new ReadableStream({
@@ -92,6 +99,8 @@ export async function POST(request: NextRequest) {
             localeName: getLocaleMetadata(locale).name,
             partialImages,
             pixelPerfect,
+            visionMode,
+            enhancedPrompt,
             timestamp: Date.now(),
           },
         });
@@ -100,11 +109,18 @@ export async function POST(request: NextRequest) {
         const projectRepo = new PrismaProjectRepository(db);
         const maskRepo = new PrismaMaskRepository(db);
         const variantRepo = new PrismaVariantRepository(db);
+        const imageAnalysisRepo = new PrismaImageAnalysisRepository(db);
         const fileStore = createFileStore(projectId);
         const imageService = getOpenAIImageService();
         const localePlanService = getLocalePlanService();
         const variantGenService = getVariantGenerationService();
         const imageProcessingService = getImageProcessingService();
+
+        // Vision pipeline services (loaded when needed)
+        const textDetectionService = visionMode ? getTextDetectionService() : null;
+        const translationService = visionMode ? getTranslationService() : null;
+        const dynamicPromptBuilder = visionMode ? getDynamicPromptBuilder() : null;
+        const promptEngineeringService = (visionMode && enhancedPrompt) ? getPromptEngineeringService() : null;
 
         // Validate project
         const project = await projectRepo.findById(projectId);
@@ -140,10 +156,153 @@ export async function POST(request: NextRequest) {
         const dimensionsResult = await imageProcessingService.getDimensions(baseImageBuffer);
         const originalDimensions = dimensionsResult.success ? dimensionsResult.dimensions : null;
 
-        // Build prompt
-        const prompt = localePlanService.buildPrompt(locale);
+        // Build prompt - use Vision pipeline if enabled
+        let prompt: string;
+        let visionPipelineUsed = false;
+        let enhancedPromptUsed = false;
 
-        console.log(`[StreamingAPI] Starting streaming generation for ${locale}`);
+        if (visionMode && textDetectionService && translationService) {
+          // Vision Pipeline: Analyze → Translate → Build Prompt
+          send({
+            type: "processing",
+            data: {
+              stage: "vision",
+              message: "Analyzing image with Vision...",
+            },
+          });
+
+          // Step 1: Get or create image analysis
+          let analysis: ImageAnalysis;
+          const existingAnalysis = await imageAnalysisRepo.findByProjectId(projectId);
+
+          if (existingAnalysis) {
+            console.log(`[StreamingAPI] Vision: Using existing analysis`);
+            analysis = {
+              textRegions: JSON.parse(existingAnalysis.textRegions) as TextRegion[],
+              layout: existingAnalysis.layout as ImageAnalysis["layout"],
+              surfaceTexture: existingAnalysis.surfaceTexture,
+              dominantColors: JSON.parse(existingAnalysis.dominantColors) as string[],
+              hasUIElements: existingAnalysis.hasUIElements,
+              uiElements: existingAnalysis.uiElements
+                ? (JSON.parse(existingAnalysis.uiElements) as string[])
+                : undefined,
+              imageDescription: existingAnalysis.imageDescription,
+              analyzedAt: existingAnalysis.analyzedAt,
+            };
+          } else {
+            console.log(`[StreamingAPI] Vision: Running new analysis`);
+            analysis = await textDetectionService.analyzeImage(baseImageBuffer);
+
+            // Store analysis for future use
+            await imageAnalysisRepo.upsert({
+              projectId,
+              textRegions: JSON.stringify(analysis.textRegions),
+              layout: analysis.layout,
+              surfaceTexture: analysis.surfaceTexture,
+              dominantColors: JSON.stringify(analysis.dominantColors),
+              hasUIElements: analysis.hasUIElements,
+              uiElements: analysis.uiElements ? JSON.stringify(analysis.uiElements) : undefined,
+              imageDescription: analysis.imageDescription,
+            });
+          }
+
+          // Step 2: Translate detected text
+          send({
+            type: "processing",
+            data: {
+              stage: "translation",
+              message: `Translating to ${getLocaleMetadata(locale).name}...`,
+            },
+          });
+
+          const translationResult = await translationService.translateTexts({
+            textRegions: analysis.textRegions,
+            targetLocale: locale,
+            context: {
+              imageType: analysis.layout,
+              tone: "neutral",
+            },
+          });
+
+          if (!translationResult.success) {
+            throw new Error(`Translation failed: ${translationResult.error}`);
+          }
+
+          // Step 3: Build prompt (use PromptEngineeringService if enabled, fallback to DynamicPromptBuilder)
+          send({
+            type: "processing",
+            data: {
+              stage: "prompt",
+              message: enhancedPrompt ? "GPT-4o engineering prompt..." : "Building prompt...",
+            },
+          });
+
+          if (enhancedPrompt && promptEngineeringService) {
+            // Sprint 10: GPT-4o writes prompts for gpt-image-1.5
+            try {
+              const engineeredResult = await promptEngineeringService.engineerPrompt({
+                analysis,
+                translations: translationResult.translations,
+                locale,
+                imageBuffer: baseImageBuffer,
+                enhancedMode: true,
+              });
+
+              if (engineeredResult.prompt && engineeredResult.confidence > 0.5) {
+                prompt = engineeredResult.prompt;
+                enhancedPromptUsed = true;
+                console.log(`[StreamingAPI] Vision: Using AI-engineered prompt (confidence: ${engineeredResult.confidence})`);
+              } else {
+                // Fallback to dynamic builder
+                if (dynamicPromptBuilder) {
+                  const promptResult = dynamicPromptBuilder.buildPrompt({
+                    analysis,
+                    translations: translationResult.translations,
+                    locale,
+                  });
+                  prompt = promptResult.prompt;
+                } else {
+                  prompt = localePlanService.buildPrompt(locale);
+                }
+                console.log(`[StreamingAPI] Vision: Fallback to template prompt (low confidence)`);
+              }
+            } catch (err) {
+              // Fallback on error
+              console.error(`[StreamingAPI] PromptEngineeringService error:`, err);
+              if (dynamicPromptBuilder) {
+                const promptResult = dynamicPromptBuilder.buildPrompt({
+                  analysis,
+                  translations: translationResult.translations,
+                  locale,
+                });
+                prompt = promptResult.prompt;
+              } else {
+                prompt = localePlanService.buildPrompt(locale);
+              }
+            }
+          } else if (dynamicPromptBuilder) {
+            const promptResult = dynamicPromptBuilder.buildPrompt({
+              analysis,
+              translations: translationResult.translations,
+              locale,
+            });
+            prompt = promptResult.prompt;
+            console.log(`[StreamingAPI] Vision: Using dynamic template prompt`);
+          } else {
+            prompt = localePlanService.buildPrompt(locale);
+          }
+
+          visionPipelineUsed = true;
+          console.log(
+            `[StreamingAPI] Vision pipeline: ${analysis.textRegions.length} regions, ${translationResult.translations.length} translations`
+          );
+        } else {
+          // Legacy: Use hardcoded prompts
+          prompt = localePlanService.buildPrompt(locale);
+          console.log(`[StreamingAPI] Using legacy prompt builder`);
+        }
+
+        console.log(`[StreamingAPI] Starting streaming generation for ${locale} (vision: ${visionPipelineUsed}, enhanced: ${enhancedPromptUsed})`);
 
         // Stream the image generation
         const streamingResult = await imageService.editImageStreaming({

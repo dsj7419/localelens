@@ -1,9 +1,9 @@
-# CLAUDE.md
+# AI Assistant Guide
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance for AI assistants working with code in this repository.
 
 > **AI HANDOFF:** For comprehensive onboarding, see `docs/AI_HANDOFF_PROMPT.md`
-> This contains the full prompt to get any AI up to speed on this project.
+> This contains the full prompt to get any AI assistant up to speed on this project.
 
 ## Project Overview
 
