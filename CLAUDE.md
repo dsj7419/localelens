@@ -98,7 +98,9 @@ src/
 ### OpenAI Image Generation
 
 - Primary model: `gpt-image-1.5` (contest requirement)
-- Parameters: `quality: "high"`, `background: "opaque"`, `size: "auto"`, `output_format: "png"`
+- Parameters: `quality: "high"`, `background: "opaque"`, `size: "auto"`, `output_format: "png"`, `moderation: "auto"`, `input_fidelity: "high"`
+- `moderation: "auto"` ensures contest-appropriate content filtering
+- `input_fidelity: "high"` better preserves input image details (gpt-image-1.5 preserves first 5 images with higher fidelity)
 - Pixel-perfect composite mode: Generated images are composited onto original using mask to guarantee 0% drift outside masked regions
 
 ### Drift Detection
@@ -140,7 +142,7 @@ IMAGE_MODEL_FALLBACK="gpt-image-1"
 - `src/server/domain/services/dynamicPromptBuilder.ts` - Layout-aware prompts (Sprint 8, now fallback)
 - `src/server/services/verificationService.ts` - GPT-4o Vision re-read verification (Sprint 9)
 - `src/server/services/maskSuggestionService.ts` - Auto-mask from detected regions (Sprint 9)
-- `docs/ENGINEERING_DECISIONS.md` - 57 documented engineering decisions with rationale
+- `docs/ENGINEERING_DECISIONS.md` - 58 documented engineering decisions with rationale
 - `docs/SPRINTS.md` - Sprint planning (Sprints 0-9 complete, Sprint 10 in progress)
 
 ## Vision Pipeline (Sprint 8 - COMPLETE)
@@ -207,6 +209,7 @@ GPT-4o Vision (Inspector) → GPT-4o (Translator) → gpt-image-1.5 (Artist)
 **Problem Solved:** Template-based prompts were too generic ("next to icons"). Hardcoded demo prompts worked because they had exact spatial relationships.
 
 **Key Innovation (Sprint 10):**
+
 - `PromptEngineeringService` - GPT-4o WRITES prompts for gpt-image-1.5
 - Instead of templates, GPT-4o generates image-specific prompts with:
   - Exact visual structure descriptions
@@ -216,6 +219,7 @@ GPT-4o Vision (Inspector) → GPT-4o (Translator) → gpt-image-1.5 (Artist)
 - Prompts read like a human expert wrote them for each specific image
 
 **Integration:**
+
 - `variant.generateAllWithVision` uses PromptEngineeringService when `enhancedPrompt: true` (default)
 - Falls back to DynamicPromptBuilder templates on failure
 

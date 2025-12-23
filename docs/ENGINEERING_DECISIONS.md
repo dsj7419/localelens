@@ -1858,6 +1858,7 @@ Created `PromptEngineeringService` (`src/server/services/promptEngineeringServic
 4. Returns prompt that reads like a human expert wrote it for this exact image
 
 **Meta-Prompt Pattern:**
+
 ```text
 "You are an expert prompt engineer specializing in image editing AI models.
 
@@ -1868,17 +1869,20 @@ and crafted a custom prompt for it. Be SPECIFIC, not generic."
 ```
 
 **Integration:**
+
 - Added `enhancedPrompt: z.boolean().default(true)` to `generateAllWithVision` schema
 - When enabled (default), uses `PromptEngineeringService` instead of `DynamicPromptBuilder`
 - Falls back to template-based prompts if GPT-4o fails
 
 **Key Design Decisions:**
+
 - Factory pattern with singleton for efficiency
 - Interface segregation (`PromptEngineeringInput`, `PromptEngineeringResult`)
 - Optional `imageBuffer` parameter for enhanced analysis (image context)
 - Graceful fallback to template-based prompts on failure
 
 **Trade-offs:**
+
 - Additional GPT-4o call per locale (increases latency and cost)
 - Prompt quality depends on GPT-4o's interpretation
 - Less predictable prompt structure
@@ -1909,6 +1913,7 @@ Implemented honest UX that sets correct expectations:
 4. Results are discarded client-side even though server completes
 
 **Implementation:**
+
 ```typescript
 // page.tsx
 const [isCancelling, setIsCancelling] = useState(false);
@@ -1922,16 +1927,79 @@ const handleCancelGeneration = () => {
 ```
 
 **UI States:**
+
 - Normal: Red "Cancel Generation" button with XCircle icon
 - Cancelling: Gray "Cancelling..." button with Loader2 spinner, disabled
 - Message below: "Server must complete current operation. Results will be discarded."
 
 **Rationale:**
+
 - Honest UX prevents confusion
 - Users understand what's happening
 - Better than fake instant cancel that would confuse when results appear later
 
 **Impact:** Clear user expectations. No confusion about cancellation behavior.
+
+---
+
+### ED-058: API Parameter Optimization (moderation + input_fidelity)
+
+**Decision:** Add `moderation: "auto"` and `input_fidelity: "high"` to all gpt-image-1.5 API calls
+
+**Date:** 2025-12-23 (Sprint 10)
+
+**Background:**
+From OpenAI's official documentation, we discovered two additional parameters for gpt-image-1.5:
+
+1. **moderation** - Controls content filtering strictness
+   - `auto` (default): Standard filtering for age-appropriate content
+   - `low`: Less restrictive filtering
+
+2. **input_fidelity** - Controls how well input image details are preserved
+   - `high`: Better preserve input image details (faces, logos, etc.)
+   - `low`: Default, less preservation
+   - For gpt-image-1.5, the first **5** input images are preserved with higher fidelity when using `high`
+
+**Previous Understanding (Incorrect):**
+Our code comments stated "input_fidelity is ONLY available for gpt-image-1, NOT gpt-image-1.5". This was incorrect.
+
+**Solution:**
+Updated `openaiImage.ts` to include both parameters:
+
+```typescript
+export const GPT_IMAGE_1_5_DEFAULTS = {
+  size: "auto" as ImageSize,
+  quality: "high" as ImageQuality,
+  background: "opaque" as ImageBackground,
+  outputFormat: "png" as ImageOutputFormat,
+  moderation: "auto" as ImageModeration, // Content safety for contest
+  inputFidelity: "high" as ImageInputFidelity, // Better preserve input details
+} as const;
+```
+
+**TypeScript SDK Compatibility:**
+The OpenAI TypeScript SDK doesn't yet include these parameters in its type definitions. We work around this using:
+
+```typescript
+const response = await this.client.images.edit({
+  // ... other params
+  moderation,
+  input_fidelity: inputFidelity,
+} as any) as OpenAI.Images.ImagesResponse;
+```
+
+**Rationale:**
+
+1. **moderation: "auto"**: For a contest submission, we MUST ensure no inappropriate content can be generated. Using `auto` (standard filtering) ensures contest-appropriate output.
+
+2. **input_fidelity: "high"**: Better preserves the original image details, which is exactly what we want for localization. Text replacement should preserve as much of the original image as possible.
+
+**Trade-offs:**
+
+- `input_fidelity: "high"` uses more input tokens (increased cost)
+- TypeScript type assertions required until SDK is updated
+
+**Impact:** Contest-safe content + better image preservation quality.
 
 ---
 

@@ -39,6 +39,24 @@ export type ImageBackground = "transparent" | "opaque" | "auto";
 export type ImageOutputFormat = "png" | "jpeg" | "webp";
 
 /**
+ * Content moderation strictness for gpt-image-1.5
+ * - "auto": Standard filtering (RECOMMENDED for contests/production)
+ * - "low": Less restrictive filtering
+ *
+ * For the OpenAI contest, we use "auto" to ensure appropriate content.
+ */
+export type ImageModeration = "auto" | "low";
+
+/**
+ * Input fidelity for gpt-image-1.5
+ * - "high": Better preserve input image details (faces, logos, etc.)
+ * - "low": Default, less preservation
+ *
+ * For gpt-image-1.5, the first 5 input images are preserved with higher fidelity.
+ */
+export type ImageInputFidelity = "high" | "low";
+
+/**
  * Default configuration optimized for gpt-image-1.5 image editing
  * These settings maximize quality and preserve original image fidelity
  */
@@ -47,6 +65,8 @@ export const GPT_IMAGE_1_5_DEFAULTS = {
   quality: "high" as ImageQuality,
   background: "opaque" as ImageBackground,
   outputFormat: "png" as ImageOutputFormat,
+  moderation: "auto" as ImageModeration, // Content safety for contest
+  inputFidelity: "high" as ImageInputFidelity, // Better preserve input details
 } as const;
 
 /** @deprecated Use GPT_IMAGE_1_5_DEFAULTS.size instead */
@@ -81,6 +101,10 @@ export interface EditImageOptions {
   outputFormat?: ImageOutputFormat;
   /** Number of variants to generate (1-10) */
   n?: number;
+  /** Content moderation - "auto" for standard filtering (contest-safe) */
+  moderation?: ImageModeration;
+  /** Input fidelity - "high" for better input preservation */
+  inputFidelity?: ImageInputFidelity;
 }
 
 export interface ImageServiceResult {
@@ -97,6 +121,8 @@ export interface ImageServiceResult {
     background: ImageBackground;
     outputFormat: ImageOutputFormat;
     n: number;
+    moderation: ImageModeration;
+    inputFidelity: ImageInputFidelity;
   };
 }
 
@@ -203,18 +229,16 @@ export interface IStreamingImageEditor {
  * Server-side only - never expose to client.
  *
  * This implementation showcases expert use of the gpt-image-1.5 API by:
- * - Using ALL available parameters (quality, background, output_format, size)
+ * - Using ALL available parameters (quality, background, output_format, size, moderation, input_fidelity)
  * - Optimizing for high-fidelity image editing with minimal drift
+ * - Using input_fidelity: "high" for better input preservation (gpt-image-1.5 preserves first 5 images)
+ * - Using moderation: "auto" for contest-appropriate content filtering
  * - Providing detailed logging of API parameters used
  *
  * Security invariants:
  * - API key is loaded from server-side env only
  * - No client-side instantiation possible
  * - No headers or config returned that could leak the key
- *
- * Note: input_fidelity parameter is ONLY available for gpt-image-1,
- * NOT gpt-image-1.5. We compensate through prompt engineering and
- * post-processing (pixel-perfect composite mode).
  */
 export class OpenAIImageService implements IImageGenerator, IImageEditor, IStreamingImageEditor {
   private readonly client: OpenAI;
@@ -286,6 +310,8 @@ export class OpenAIImageService implements IImageGenerator, IImageEditor, IStrea
       quality = GPT_IMAGE_1_5_DEFAULTS.quality,
       background = GPT_IMAGE_1_5_DEFAULTS.background,
       outputFormat = GPT_IMAGE_1_5_DEFAULTS.outputFormat,
+      moderation = GPT_IMAGE_1_5_DEFAULTS.moderation,
+      inputFidelity = GPT_IMAGE_1_5_DEFAULTS.inputFidelity,
       n = 1,
     } = options;
 
@@ -298,6 +324,8 @@ export class OpenAIImageService implements IImageGenerator, IImageEditor, IStrea
       quality,
       background,
       outputFormat,
+      moderation,
+      inputFidelity,
       n,
       modelsToTry,
     });
@@ -308,7 +336,7 @@ export class OpenAIImageService implements IImageGenerator, IImageEditor, IStrea
         prompt,
         imageBuffer,
         maskBuffer,
-        { size, quality, background, outputFormat, n }
+        { size, quality, background, outputFormat, moderation, inputFidelity, n }
       );
 
       if (result.success) {
@@ -350,6 +378,8 @@ export class OpenAIImageService implements IImageGenerator, IImageEditor, IStrea
       quality = GPT_IMAGE_1_5_DEFAULTS.quality,
       background = GPT_IMAGE_1_5_DEFAULTS.background,
       outputFormat = GPT_IMAGE_1_5_DEFAULTS.outputFormat,
+      moderation = GPT_IMAGE_1_5_DEFAULTS.moderation,
+      inputFidelity = GPT_IMAGE_1_5_DEFAULTS.inputFidelity,
     } = options;
 
     // Clamp selection count to valid range
@@ -377,6 +407,8 @@ export class OpenAIImageService implements IImageGenerator, IImageEditor, IStrea
         });
 
         // Generate multiple variants in one API call
+        // Note: moderation and input_fidelity are new API parameters not yet in SDK types
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const response = await this.client.images.edit({
           model,
           image: imageFile,
@@ -387,7 +419,9 @@ export class OpenAIImageService implements IImageGenerator, IImageEditor, IStrea
           quality,
           background,
           output_format: outputFormat,
-        });
+          moderation,
+          input_fidelity: inputFidelity,
+        } as any) as OpenAI.Images.ImagesResponse;
 
         // Extract all variants
         const candidates = await this.extractAllImagesFromResponse(response, model);
@@ -421,6 +455,8 @@ export class OpenAIImageService implements IImageGenerator, IImageEditor, IStrea
           quality,
           background,
           outputFormat,
+          moderation,
+          inputFidelity,
           n,
         };
 
@@ -481,6 +517,8 @@ export class OpenAIImageService implements IImageGenerator, IImageEditor, IStrea
       quality = GPT_IMAGE_1_5_DEFAULTS.quality,
       background = GPT_IMAGE_1_5_DEFAULTS.background,
       outputFormat = GPT_IMAGE_1_5_DEFAULTS.outputFormat,
+      moderation = GPT_IMAGE_1_5_DEFAULTS.moderation,
+      inputFidelity = GPT_IMAGE_1_5_DEFAULTS.inputFidelity,
       partialImages = 2,
       onEvent,
     } = options;
@@ -495,6 +533,8 @@ export class OpenAIImageService implements IImageGenerator, IImageEditor, IStrea
       quality,
       background,
       outputFormat,
+      moderation,
+      inputFidelity,
       partialImages,
       stream: true,
     });
@@ -510,6 +550,8 @@ export class OpenAIImageService implements IImageGenerator, IImageEditor, IStrea
       formData.append("quality", quality);
       formData.append("background", background);
       formData.append("output_format", outputFormat);
+      formData.append("moderation", moderation);
+      formData.append("input_fidelity", inputFidelity);
 
       // Add image and mask as blobs (convert Buffer to Uint8Array for Blob compatibility)
       const imageBlob = new Blob([new Uint8Array(imageBuffer)], { type: "image/png" });
@@ -554,6 +596,8 @@ export class OpenAIImageService implements IImageGenerator, IImageEditor, IStrea
               quality,
               background,
               outputFormat,
+              moderation,
+              inputFidelity,
               n: 1,
             },
           };
@@ -679,6 +723,8 @@ export class OpenAIImageService implements IImageGenerator, IImageEditor, IStrea
           quality,
           background,
           outputFormat,
+          moderation,
+          inputFidelity,
           n: 1,
         },
       };
@@ -726,6 +772,8 @@ export class OpenAIImageService implements IImageGenerator, IImageEditor, IStrea
       quality = GPT_IMAGE_1_5_DEFAULTS.quality,
       background = GPT_IMAGE_1_5_DEFAULTS.background,
       outputFormat = GPT_IMAGE_1_5_DEFAULTS.outputFormat,
+      moderation = GPT_IMAGE_1_5_DEFAULTS.moderation,
+      inputFidelity = GPT_IMAGE_1_5_DEFAULTS.inputFidelity,
       partialImages = 2,
     } = options;
 
@@ -744,6 +792,8 @@ export class OpenAIImageService implements IImageGenerator, IImageEditor, IStrea
       formData.append("quality", quality);
       formData.append("background", background);
       formData.append("output_format", outputFormat);
+      formData.append("moderation", moderation);
+      formData.append("input_fidelity", inputFidelity);
 
       const imageBlob = new Blob([new Uint8Array(imageBuffer)], { type: "image/png" });
       const maskBlob = new Blob([new Uint8Array(maskBuffer)], { type: "image/png" });
@@ -824,10 +874,12 @@ export class OpenAIImageService implements IImageGenerator, IImageEditor, IStrea
       quality: ImageQuality;
       background: ImageBackground;
       outputFormat: ImageOutputFormat;
+      moderation: ImageModeration;
+      inputFidelity: ImageInputFidelity;
       n: number;
     }
   ): Promise<ImageServiceResult> {
-    const { size, quality, background, outputFormat, n } = params;
+    const { size, quality, background, outputFormat, moderation, inputFidelity, n } = params;
 
     try {
       console.log(`[OpenAIImageService] Attempting edit with model: ${model}`);
@@ -836,6 +888,8 @@ export class OpenAIImageService implements IImageGenerator, IImageEditor, IStrea
         quality,
         background,
         output_format: outputFormat,
+        moderation,
+        input_fidelity: inputFidelity,
         n,
       });
 
@@ -848,7 +902,10 @@ export class OpenAIImageService implements IImageGenerator, IImageEditor, IStrea
       });
 
       // Full gpt-image-1.5 API call with ALL available parameters
-      // Note: input_fidelity is NOT available for gpt-image-1.5 (gpt-image-1 only)
+      // - moderation: "auto" for contest-appropriate content filtering
+      // - input_fidelity: "high" for better preservation (gpt-image-1.5 preserves first 5 images)
+      // Note: moderation and input_fidelity are new API parameters not yet in SDK types
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const response = await this.client.images.edit({
         model,
         image: imageFile,
@@ -859,7 +916,9 @@ export class OpenAIImageService implements IImageGenerator, IImageEditor, IStrea
         quality,
         background,
         output_format: outputFormat,
-      });
+        moderation,
+        input_fidelity: inputFidelity,
+      } as any) as OpenAI.Images.ImagesResponse;
 
       const result = await this.extractImageFromResponse(response, model);
 
@@ -872,6 +931,8 @@ export class OpenAIImageService implements IImageGenerator, IImageEditor, IStrea
           quality,
           background,
           outputFormat,
+          moderation,
+          inputFidelity,
           n,
         };
       } else {
