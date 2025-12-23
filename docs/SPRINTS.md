@@ -1286,7 +1286,30 @@ export interface MaskSuggestion {
 }
 ```
 
-#### 3) UI Enhancements
+**Benefits of Auto-Mask (discovered in Sprint 8 testing):**
+
+- Clean rectangular masks instead of organic brush strokes
+- Eliminates "smudge" artifacts from hand-drawn masks
+- Precise text region coverage
+- Consistent padding around text
+
+#### 3) Line-Count Preservation in Translations (ENHANCEMENT)
+
+**File:** `src/server/services/translationService.ts`
+
+**Problem discovered:** Spanish translation combined 4 lines into 3 ("THAN YOU THINK" → "DE LO QUE CREES"), leaving one sticky note empty.
+
+**Solution:** Add line-count constraint to translation prompt:
+
+```typescript
+// Add to translation prompt:
+"CRITICAL: The source has {N} separate text regions.
+Your translation MUST produce EXACTLY {N} separate translations.
+Do NOT combine lines. Each region must have its own translation.
+If the natural translation would combine phrases, split them creatively."
+```
+
+#### 4) UI Enhancements
 
 - Display "Translation Accuracy: 98%" alongside drift score
 - Show verification mismatches in results
@@ -1322,32 +1345,79 @@ Polish the complete solution and prepare for contest submission with compelling 
 
 ### 12.2 Scope (Must Ship)
 
-#### 1) Mode Toggle
+#### 1) Dynamic Prompt Generation (ARCHITECTURAL UPGRADE)
 
-**Feature:** "Demo Mode" vs "Any Image" mode toggle
+**Current limitation:** `DynamicPromptBuilder` uses predefined layout templates (sticky-notes, app-screenshot, banner, etc.). While GPT-4o picks the category, we still constrain it to our predefined templates.
 
-- Demo Mode: Uses hardcoded LOCALIZED_COPY (current behavior, guaranteed to work)
-- Any Image Mode: Uses Vision pipeline (new behavior, works with custom images)
+**World-class solution:** Have GPT-4o generate contextual preservation instructions on-the-fly based on what it actually sees.
 
-This ensures:
+**File:** `src/server/domain/services/dynamicPromptBuilder.ts`
 
-- Judges can see the "ideal" demo output
-- Users can try their own images
-- Both paths are well-tested
+**Change:** Instead of:
 
-#### 2) README Overhaul
+```text
+GPT-4o → picks "sticky-notes" → we use STICKY_NOTES_TEMPLATE
+```
+
+Do this:
+
+```text
+GPT-4o → analyzes image → generates custom preservation instructions
+```
+
+**New flow in TextDetectionService:**
+
+```typescript
+// Add to ImageAnalysis:
+export interface ImageAnalysis {
+  // ... existing fields ...
+
+  /** GPT-4o generated preservation instructions specific to THIS image */
+  preservationInstructions: string;
+
+  /** GPT-4o generated localization guidance specific to THIS image */
+  localizationGuidance: string;
+}
+```
+
+**Vision prompt addition:**
+
+```text
+"Based on what you see in this specific image, write:
+1. PRESERVATION_INSTRUCTIONS: What must be preserved exactly?
+   (e.g., 'The 4 colored sticky notes must keep their exact colors
+   and positions. The white dumbbell in background must not change.')
+2. LOCALIZATION_GUIDANCE: How should text be replaced?
+   (e.g., 'Each note contains one phrase. Replace text centered on
+   each note, matching the bold black handwritten style.')"
+```
+
+**Benefits:**
+
+- No predefined categories limiting the system
+- GPT-4o describes exactly what IT sees, not what we expect
+- Works for ANY image type, even ones we never imagined
+- Truly dynamic, truly universal
+
+#### 2) Mode Toggle (SIMPLIFIED)
+
+**Feature:** Remove "Demo Mode" - Vision pipeline IS the primary mode
+
+Since Sprint 9 adds verification and auto-mask, the Vision pipeline should be reliable enough to be the default. Demo Mode becomes unnecessary complexity.
+
+#### 3) README Overhaul
 
 **File:** `README.md`
 
 Update with:
 
-- New "Any Image" capability
+- Universal image support (no predefined templates)
 - Two-model pipeline explanation (GPT-4o + gpt-image-1.5)
-- Updated screenshots showing custom image support
-- Architecture diagram
-- Translation accuracy metrics
+- Updated screenshots showing diverse image support
+- Architecture diagram showing dynamic prompt generation
+- Translation accuracy and verification metrics
 
-#### 3) Demo Video/GIF
+#### 4) Demo Video/GIF
 
 Create compelling demo showing:
 
@@ -1358,26 +1428,31 @@ Create compelling demo showing:
 - 0% drift result
 - Translation accuracy verification
 
-#### 4) Diverse Image Testing
+#### 5) Diverse Image Testing
 
-Test with multiple image types:
+Test with multiple image types to prove universal support:
 
 - App store screenshots (original use case)
 - Motivational posters (sticky notes)
 - Marketing banners
 - Social media graphics
 - Product packaging
+- Memes / informal graphics
+- Handwritten text images
+- Multi-language source images
 
 Document results in `docs/TESTING_RESULTS.md`
 
 ### 12.3 Acceptance Criteria
 
-- [ ] Mode toggle works smoothly
-- [ ] README is compelling and accurate
-- [ ] Demo video shows full workflow
-- [ ] 5+ diverse images tested successfully
+- [ ] Dynamic prompt generation replaces predefined templates
+- [ ] GPT-4o generates image-specific preservation instructions
+- [ ] README showcases universal image support
+- [ ] Demo video shows full workflow with diverse images
+- [ ] 8+ diverse image types tested successfully
 - [ ] All documentation updated
 - [ ] Repository is judge-ready
+- [ ] No hardcoded assumptions about image content
 
 ### 12.4 Deliverables
 

@@ -1351,6 +1351,82 @@ useEffect(() => {
 
 ---
 
+### ED-045: Dynamic Prompt Generation (PLANNED - Sprint 10)
+
+**Decision:** Replace predefined layout templates with GPT-4o generated preservation instructions
+
+**Date:** 2025-12-22 (documented during Sprint 8 testing)
+
+**Problem:**
+Current `DynamicPromptBuilder` uses predefined layout categories:
+
+- `app-screenshot`, `sticky-notes`, `banner`, `poster`, etc.
+- GPT-4o picks a category, we use corresponding template
+- This is still a form of "hardcoding" - we're constraining to OUR categories
+
+**Example failure mode:**
+If user uploads an image type we didn't anticipate (e.g., a chalk menu board, a tattoo design, embroidered text), our templates may not have appropriate instructions.
+
+**Solution (Sprint 10):**
+Have GPT-4o generate preservation and localization instructions dynamically:
+
+```typescript
+// Add to ImageAnalysis from TextDetectionService:
+{
+  preservationInstructions: "The 4 colored sticky notes must keep their exact colors...",
+  localizationGuidance: "Each note contains one phrase. Replace text centered..."
+}
+```
+
+GPT-4o describes what IT sees, not what we expect. Truly universal.
+
+**Trade-offs:**
+
+- More tokens per analysis (GPT-4o generates more text)
+- Less predictable prompt structure
+- May need prompt engineering to get consistent quality
+
+**Impact:** World-class universal image support. No hardcoded assumptions.
+
+---
+
+### ED-046: Line-Count Preservation in Translations (PLANNED - Sprint 9)
+
+**Decision:** Enforce that N source text regions produce exactly N translations
+
+**Date:** 2025-12-22 (discovered during Sprint 8 testing)
+
+**Problem:**
+Spanish translation of "YOU ARE / STRONGER / THAN YOU / THINK" became:
+
+- "ERES" / "FUERTE" / "DE LO QUE CREES" / *(empty)*
+
+GPT-4o combined "THAN YOU THINK" into one natural Spanish phrase, leaving the 4th sticky note empty.
+
+**Solution (Sprint 9):**
+Add constraint to TranslationService prompt:
+
+```text
+"CRITICAL: The source has {N} separate text regions.
+Your translation MUST produce EXACTLY {N} separate translations.
+Do NOT combine lines. Each region must have its own translation.
+If the natural translation would combine phrases, split them creatively."
+```
+
+For Spanish, this might produce:
+
+- "ERES MÁS" / "FUERTE" / "DE LO QUE" / "CREES"
+
+**Trade-offs:**
+
+- May produce less natural translations
+- Forced splits might feel awkward in some languages
+- Trade-off: visual consistency vs linguistic naturalness
+
+**Impact:** Translations always match source structure. No empty regions.
+
+---
+
 ## How to Add Decisions
 
 When making a decision not covered by the spec:

@@ -44,13 +44,38 @@
 - ✅ TypeScript strict mode passes
 - ✅ All documentation updated
 
+### Discoveries from Sprint 8 Testing (IMPORTANT)
+
+**Issues Found:**
+
+1. **Spanish 3→4 line problem**: Translation combined "THAN YOU THINK" into one line ("DE LO QUE CREES"), leaving 4th sticky note empty. TranslationService needs line-count enforcement.
+2. **Brush stroke artifacts**: Hand-drawn masks create "smudge" effects in output. Auto-mask with clean rectangles will fix this.
+3. **Predefined layout templates**: Current `DynamicPromptBuilder` uses hardcoded templates (sticky-notes, app-screenshot, etc.). Sprint 10 should make GPT-4o generate preservation instructions dynamically.
+
+**What Worked Well:**
+
+- Vision pipeline correctly identified image as "sticky-notes" layout
+- French translation split perfectly into 4 lines
+- Colors and background preserved correctly
+- RTL Arabic rendered properly (though had some redundancy)
+
 ### Next Session Should (Sprint 9)
 
 - [ ] Create `src/server/services/verificationService.ts` — Re-read generated images
-- [ ] Create `src/server/services/maskSuggestionService.ts` — Auto-mask from regions
+- [ ] Create `src/server/services/maskSuggestionService.ts` — Auto-mask from regions (CLEAN RECTANGLES)
+- [ ] Add line-count preservation to `TranslationService` — Force N inputs = N outputs
 - [ ] Add Translation Accuracy metric to results
 - [ ] Add "Accept Suggested Mask" button on Mask step
-- [ ] Test with diverse images (sticky notes, banners, screenshots)
+- [ ] Test with diverse images
+
+### Sprint 10 Architecture Goal (WORLD-CLASS)
+
+Remove predefined layout templates. Have GPT-4o generate:
+
+- `preservationInstructions`: What must stay exactly the same in THIS image
+- `localizationGuidance`: How text should be replaced in THIS image
+
+This makes the system truly universal — no hardcoded assumptions about image content.
 
 ---
 
