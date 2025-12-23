@@ -43,6 +43,7 @@ interface GenerateStepSidebarProps {
   onGenerate: () => void;
   onDemoMode?: () => void;
   onCancel?: () => void;
+  isCancelling?: boolean;
   onCurrentLocaleChange?: (locale: LocaleId | null) => void;
 }
 
@@ -82,6 +83,7 @@ export function GenerateStepSidebar({
   onGenerate,
   onDemoMode,
   onCancel,
+  isCancelling,
   onCurrentLocaleChange,
 }: GenerateStepSidebarProps) {
   return (
@@ -103,6 +105,7 @@ export function GenerateStepSidebar({
       onGenerate={onGenerate}
       onDemoMode={isDemoProject ? onDemoMode : undefined}
       onCancel={onCancel}
+      isCancelling={isCancelling}
       onCurrentLocaleChange={onCurrentLocaleChange}
     />
   );

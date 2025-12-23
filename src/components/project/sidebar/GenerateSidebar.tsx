@@ -43,6 +43,8 @@ interface GenerateSidebarProps {
   onGenerate: () => void;
   onDemoMode?: () => void;
   onCancel?: () => void;
+  /** Whether cancellation has been requested (waiting for server to finish) */
+  isCancelling?: boolean;
   onCurrentLocaleChange?: (locale: LocaleId | null) => void;
 }
 
@@ -70,6 +72,7 @@ export function GenerateSidebar({
   onGenerate,
   onDemoMode,
   onCancel,
+  isCancelling = false,
   onCurrentLocaleChange,
 }: GenerateSidebarProps) {
   const allSelected = selectedLocales.length === SUPPORTED_LOCALES.length;
@@ -326,14 +329,31 @@ export function GenerateSidebar({
           </Button>
         )}
         {isGenerating ? (
-          <Button
-            variant="destructive"
-            className="w-full gap-2"
-            onClick={onCancel}
-          >
-            <XCircle className="h-4 w-4" />
-            Cancel Generation
-          </Button>
+          <>
+            <Button
+              variant={isCancelling ? "secondary" : "destructive"}
+              className="w-full gap-2"
+              onClick={onCancel}
+              disabled={isCancelling}
+            >
+              {isCancelling ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Cancelling...
+                </>
+              ) : (
+                <>
+                  <XCircle className="h-4 w-4" />
+                  Cancel Generation
+                </>
+              )}
+            </Button>
+            {isCancelling && (
+              <p className="text-xs text-muted-foreground text-center">
+                Server must complete current operation. Results will be discarded.
+              </p>
+            )}
+          </>
         ) : (
           <Button
             className="w-full gap-2"

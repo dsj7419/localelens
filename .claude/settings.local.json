@@ -26,7 +26,9 @@
       "Bash(cat:*)",
       "WebFetch(domain:platform.openai.com)",
       "Bash(timeout 15 pnpm dev:*)",
-      "Bash(DEBUG=*)"
+      "Bash(DEBUG=*)",
+      "WebFetch(domain:cookbook.openai.com)",
+      "WebFetch(domain:community.openai.com)"
     ]
   }
 }

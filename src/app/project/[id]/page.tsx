@@ -125,6 +125,8 @@ export default function ProjectPage() {
 
   // Track if generation was cancelled (to ignore results when mutation completes)
   const generationCancelledRef = useRef(false);
+  // UI state for showing "Cancelling..." while waiting for server
+  const [isCancelling, setIsCancelling] = useState(false);
 
   // Calculate canvas dimensions based on base image aspect ratio
   const canvasDimensions = useMemo(
@@ -244,8 +246,13 @@ export default function ProjectPage() {
       if (generationCancelledRef.current) {
         console.log("[ProjectPage] Generation was cancelled, ignoring results");
         generationCancelledRef.current = false;
+        setIsCancelling(false);
+        setGenerationProgress(0);
+        setCurrentGeneratingLocale(null);
+        toast.success("Generation cancelled", { description: "Results discarded as requested" });
         return;
       }
+      setIsCancelling(false);
       setGenerationProgress(100);
       void queries.refetchProject();
       workflow.goToResults();
@@ -255,6 +262,7 @@ export default function ProjectPage() {
     },
     onError: () => {
       generationCancelledRef.current = false;
+      setIsCancelling(false);
       setGenerationProgress(0);
     },
   });
@@ -320,17 +328,17 @@ export default function ProjectPage() {
     console.log("[ProjectPage] Cancelling generation");
     // Mark as cancelled so mutation results are ignored
     generationCancelledRef.current = true;
+    // Show cancelling state in UI
+    setIsCancelling(true);
     // Cancel streaming if active
     streaming.cancel();
-    // Reset generation state
-    setGenerationProgress(0);
-    setCurrentGeneratingLocale(null);
-    toast.info("Generation cancelled", { description: "Server may still process, but results will be ignored" });
+    toast.info("Cancellation requested", { description: "Waiting for server to complete current operation..." });
   }, [streaming]);
 
   const handleGenerate = useCallback(async () => {
     // Reset cancelled flag when starting new generation
     generationCancelledRef.current = false;
+    setIsCancelling(false);
     setIsDemoMode(false);
     setGenerationProgress(0);
 
@@ -541,6 +549,7 @@ export default function ProjectPage() {
             onGenerate={handleGenerate}
             onDemoMode={handleDemoMode}
             onCancel={handleCancelGeneration}
+            isCancelling={isCancelling}
             onCurrentLocaleChange={setCurrentGeneratingLocale}
           />
         );

@@ -167,7 +167,7 @@ Notes
 - Images were generated using gpt-image-1.5 or gpt-image-1
 
 Generated with LocaleLens
-https://github.com/your-repo/localelens
+https://github.com/dsj7419/localelens
 `;
   }
 }

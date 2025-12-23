@@ -22,6 +22,7 @@ import { getDemoModeService } from "~/server/services/demoModeService";
 import { getTextDetectionService, type ImageAnalysis, type TextRegion } from "~/server/services/textDetectionService";
 import { getTranslationService, type TranslatedText } from "~/server/services/translationService";
 import { getDynamicPromptBuilder } from "~/server/domain/services/dynamicPromptBuilder";
+import { getPromptEngineeringService } from "~/server/services/promptEngineeringService";
 import { getVerificationService } from "~/server/services/verificationService";
 import {
   SUPPORTED_LOCALES,
@@ -145,6 +146,8 @@ const generateAllWithVisionSchema = z.object({
   pixelPerfect: z.boolean().default(true),
   /** Use ultra-strict preservation mode */
   ultraStrict: z.boolean().default(false),
+  /** Use AI-powered prompt engineering for better results (default: true) */
+  enhancedPrompt: z.boolean().default(true),
 });
 
 const verifyVariantSchema = z.object({
@@ -481,13 +484,14 @@ export const variantRouter = createTRPCRouter({
   generateAllWithVision: publicProcedure
     .input(generateAllWithVisionSchema)
     .mutation(async ({ ctx, input }) => {
-      const { projectId, locales, pixelPerfect, ultraStrict } = input;
+      const { projectId, locales, pixelPerfect, ultraStrict, enhancedPrompt } = input;
       const results: Array<{
         locale: LocaleId;
         success: boolean;
         error?: string;
         modelUsed?: string;
         visionPipeline: boolean;
+        enhancedPromptUsed?: boolean;
       }> = [];
 
       // Load dependencies
@@ -500,6 +504,7 @@ export const variantRouter = createTRPCRouter({
       const textDetectionService = getTextDetectionService();
       const translationService = getTranslationService();
       const promptBuilder = getDynamicPromptBuilder();
+      const promptEngineeringService = getPromptEngineeringService();
       const variantGenService = getVariantGenerationService();
 
       // Validate project
@@ -609,19 +614,40 @@ export const variantRouter = createTRPCRouter({
             ...analysis,
             textRegions: regionsToTranslate,
           };
-          const promptResult = promptBuilder.buildPrompt({
-            analysis: filteredAnalysis,
-            translations: translationResult.translations,
-            locale,
-            ultraStrict,
-          });
+
+          let promptText: string;
+          let enhancedPromptUsed = false;
+
+          if (enhancedPrompt) {
+            // Use AI-powered prompt engineering for better results
+            console.log(`[VariantRouter] Using PromptEngineeringService for ${locale}`);
+            const engineeredPrompt = await promptEngineeringService.engineerPrompt({
+              analysis: filteredAnalysis,
+              translations: translationResult.translations,
+              locale,
+              imageBuffer: baseImageBuffer,
+              enhancedMode: true,
+            });
+            promptText = engineeredPrompt.prompt;
+            enhancedPromptUsed = engineeredPrompt.enhancedAnalysisUsed;
+            console.log(`[VariantRouter] Prompt engineered with confidence: ${engineeredPrompt.confidence}`);
+          } else {
+            // Use standard dynamic prompt builder
+            const promptResult = promptBuilder.buildPrompt({
+              analysis: filteredAnalysis,
+              translations: translationResult.translations,
+              locale,
+              ultraStrict,
+            });
+            promptText = promptResult.prompt;
+          }
 
           // Step 4: Generate
           const result = await variantGenService.generateVariant(
             {
               projectId,
               locale,
-              prompt: promptResult.prompt,
+              prompt: promptText,
               baseImageBuffer,
               maskBuffer,
               pixelPerfect,
@@ -637,6 +663,7 @@ export const variantRouter = createTRPCRouter({
             error: result.error,
             modelUsed: result.modelUsed,
             visionPipeline: true,
+            enhancedPromptUsed,
           });
 
           if (result.success) {
