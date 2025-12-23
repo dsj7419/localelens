@@ -65,10 +65,11 @@ export function useProjectMutations({
   });
 
   const loadDemoMask = api.project.loadDemoMask.useMutation({
-    onSuccess: () => {
+    onSuccess: async () => {
       toast.success("Demo mask loaded");
       onProjectChange?.();
-      // Note: caller should handle canvas reload via onMaskChange
+      // Must call onMaskChange to reload the mask into the canvas
+      await onMaskChange?.();
     },
     onError: (error) => toast.error("Load failed", { description: error.message }),
   });

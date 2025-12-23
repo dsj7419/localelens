@@ -7,7 +7,7 @@
 
 "use client";
 
-import { useState, useCallback, useEffect, useMemo } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { api } from "~/trpc/react";
@@ -123,6 +123,9 @@ export default function ProjectPage() {
   // Verification state (Sprint 9)
   const [verifyingLocale, setVerifyingLocale] = useState<LocaleId | null>(null);
 
+  // Track if generation was cancelled (to ignore results when mutation completes)
+  const generationCancelledRef = useRef(false);
+
   // Calculate canvas dimensions based on base image aspect ratio
   const canvasDimensions = useMemo(
     () => calculateCanvasDimensions(queries.baseImageWidth, queries.baseImageHeight),
@@ -237,6 +240,12 @@ export default function ProjectPage() {
   // Vision pipeline generation mutation
   const generateWithVisionMutation = api.variant.generateAllWithVision.useMutation({
     onSuccess: (data) => {
+      // Check if generation was cancelled - ignore results if so
+      if (generationCancelledRef.current) {
+        console.log("[ProjectPage] Generation was cancelled, ignoring results");
+        generationCancelledRef.current = false;
+        return;
+      }
       setGenerationProgress(100);
       void queries.refetchProject();
       workflow.goToResults();
@@ -245,6 +254,7 @@ export default function ProjectPage() {
       }
     },
     onError: () => {
+      generationCancelledRef.current = false;
       setGenerationProgress(0);
     },
   });
@@ -308,15 +318,19 @@ export default function ProjectPage() {
   // Cancel handler for generation
   const handleCancelGeneration = useCallback(() => {
     console.log("[ProjectPage] Cancelling generation");
+    // Mark as cancelled so mutation results are ignored
+    generationCancelledRef.current = true;
     // Cancel streaming if active
     streaming.cancel();
     // Reset generation state
     setGenerationProgress(0);
     setCurrentGeneratingLocale(null);
-    toast.info("Generation cancelled");
+    toast.info("Generation cancelled", { description: "Server may still process, but results will be ignored" });
   }, [streaming]);
 
   const handleGenerate = useCallback(async () => {
+    // Reset cancelled flag when starting new generation
+    generationCancelledRef.current = false;
     setIsDemoMode(false);
     setGenerationProgress(0);
 

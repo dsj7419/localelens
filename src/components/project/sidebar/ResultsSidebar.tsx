@@ -54,6 +54,17 @@ function getDriftBadgeVariant(
 }
 
 /**
+ * Get color class for verification accuracy
+ * Green: 75%+, Yellow: 60-74.99%, Red: below 60%
+ */
+function getAccuracyColorClass(accuracy: number | null): string {
+  if (accuracy === null) return "";
+  if (accuracy >= 75) return "text-green-500";
+  if (accuracy >= 60) return "text-yellow-500";
+  return "text-red-500";
+}
+
+/**
  * ResultsSidebar Component
  *
  * Sidebar panel for the Results step.
@@ -104,13 +115,15 @@ export function ResultsSidebar({
             {variants.map((v) => {
               const meta = LOCALE_REGISTRY[v.locale];
               const isActive = activeVariant === v.locale;
+              const hasAccuracy = v.translationAccuracy !== null;
+              const accuracyColor = getAccuracyColorClass(v.translationAccuracy);
 
               return (
                 <button
                   key={v.locale}
                   onClick={() => onVariantSelect(v.locale)}
                   className={`
-                    w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all text-left
+                    w-full flex items-center gap-2 px-3 py-2 rounded-lg transition-all text-left
                     ${isActive
                       ? "bg-primary/10 border border-primary/30"
                       : "bg-muted/50 border border-transparent hover:bg-muted"
@@ -129,6 +142,12 @@ export function ResultsSidebar({
                       )}
                     </div>
                   </div>
+                  {/* Verification accuracy indicator */}
+                  {hasAccuracy && (
+                    <span className={`text-xs font-semibold ${accuracyColor}`}>
+                      {v.translationAccuracy?.toFixed(0)}%
+                    </span>
+                  )}
                   {v.driftStatus !== "PENDING" && (
                     <Badge
                       variant={getDriftBadgeVariant(v.driftStatus)}
