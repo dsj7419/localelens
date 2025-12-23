@@ -9,7 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 LocaleLens is a locally-runnable tool for localizing marketing visuals using OpenAI's gpt-image-1.5 API. Users upload images, mark text regions with a mask, generate localized variants in multiple languages (including RTL), and automatically detect unintended visual drift.
 
-**Key Innovation:** Two-model pipeline using GPT-4o Vision (to detect text) + gpt-image-1.5 (to generate). This enables universal image support - works with ANY image, not just demo screenshots.
+**Key Innovation:** Three-model pipeline using GPT-4o Vision (to detect text) + GPT-4o (to write prompts) + gpt-image-1.5 (to generate). The breakthrough: GPT-4o WRITES the prompts for gpt-image-1.5, generating image-specific prompts with spatial relationships as detailed as hand-crafted ones. This enables universal image support - works with ANY image.
 
 ## Development Commands
 
@@ -74,15 +74,16 @@ src/
 
 4. **SSE Streaming**: `/api/variant/stream` endpoint provides progressive image previews during generation. Events: `start`, `partial`, `processing`, `complete`, `error`.
 
-5. **Two-Model Pipeline** (Sprint 8+):
+5. **Three-Model Pipeline** (Sprint 8-10):
 
    ```text
-   GPT-4o Vision (Inspector) → GPT-4o (Translator) → gpt-image-1.5 (Artist) → GPT-4o Vision (Verifier)
+   GPT-4o Vision (Inspector) → GPT-4o (Translator) → GPT-4o (Prompt Writer) → gpt-image-1.5 (Artist) → GPT-4o Vision (Verifier)
    ```
 
    - **TextDetectionService**: Extracts text regions from any image using GPT-4o Vision
    - **TranslationService**: Translates detected text to target locales (with line-count preservation)
-   - **DynamicPromptBuilder**: Builds image-specific prompts (not hardcoded)
+   - **PromptEngineeringService**: GPT-4o WRITES prompts for gpt-image-1.5 (Sprint 10 KEY INNOVATION)
+   - **DynamicPromptBuilder**: Layout-aware templates (fallback if PromptEngineeringService fails)
    - **VerificationService**: Re-reads generated images to verify translation accuracy (Sprint 9)
    - **MaskSuggestionService**: Auto-generates clean rectangular masks from detected regions (Sprint 9)
 
@@ -135,11 +136,12 @@ IMAGE_MODEL_FALLBACK="gpt-image-1"
 - `src/server/services/openaiImage.ts` - OpenAI gpt-image-1.5 client with streaming
 - `src/server/services/textDetectionService.ts` - GPT-4o Vision text extraction (Sprint 8)
 - `src/server/services/translationService.ts` - Dynamic text translation (Sprint 8)
-- `src/server/domain/services/dynamicPromptBuilder.ts` - Layout-aware prompts (Sprint 8)
+- `src/server/services/promptEngineeringService.ts` - GPT-4o writes prompts for gpt-image-1.5 (Sprint 10 KEY INNOVATION)
+- `src/server/domain/services/dynamicPromptBuilder.ts` - Layout-aware prompts (Sprint 8, now fallback)
 - `src/server/services/verificationService.ts` - GPT-4o Vision re-read verification (Sprint 9)
 - `src/server/services/maskSuggestionService.ts` - Auto-mask from detected regions (Sprint 9)
-- `docs/ENGINEERING_DECISIONS.md` - 55 documented engineering decisions with rationale
-- `docs/SPRINTS.md` - Sprint planning (Sprints 0-9 complete, Sprint 10 planned)
+- `docs/ENGINEERING_DECISIONS.md` - 57 documented engineering decisions with rationale
+- `docs/SPRINTS.md` - Sprint planning (Sprints 0-9 complete, Sprint 10 in progress)
 
 ## Vision Pipeline (Sprint 8 - COMPLETE)
 
@@ -200,10 +202,27 @@ GPT-4o Vision (Inspector) → GPT-4o (Translator) → gpt-image-1.5 (Artist)
 - Region merging disabled (each text region gets separate mask)
 - Line-count preservation in translations
 
+## Prompt Engineering Pipeline (Sprint 10 - IN PROGRESS)
+
+**Problem Solved:** Template-based prompts were too generic ("next to icons"). Hardcoded demo prompts worked because they had exact spatial relationships.
+
+**Key Innovation (Sprint 10):**
+- `PromptEngineeringService` - GPT-4o WRITES prompts for gpt-image-1.5
+- Instead of templates, GPT-4o generates image-specific prompts with:
+  - Exact visual structure descriptions
+  - Spatial relationships ("immediately to the right of [icon]")
+  - Anchor points ("checkmark icon at start of each bullet")
+  - Comprehensive preservation lists
+- Prompts read like a human expert wrote them for each specific image
+
+**Integration:**
+- `variant.generateAllWithVision` uses PromptEngineeringService when `enhancedPrompt: true` (default)
+- Falls back to DynamicPromptBuilder templates on failure
+
 ## Current Sprint Status
 
 | Sprint | Status |
 | Sprints 0-9 | **COMPLETE** |
-| Sprint 10 | PLANNED - Dynamic prompts, README overhaul, contest submission |
+| Sprint 10 | **IN PROGRESS** - PromptEngineeringService done, README/testing remaining |
 
 See `docs/SPRINTS.md` for full sprint details and `docs/AI_HANDOFF_PROMPT.md` for AI onboarding.

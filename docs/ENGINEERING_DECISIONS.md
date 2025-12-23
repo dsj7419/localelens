@@ -1831,6 +1831,110 @@ const applySuggestedMaskMutation = api.project.applySuggestedMask.useMutation({
 
 ---
 
+### ED-056: PromptEngineeringService — GPT-4o Writes Prompts for gpt-image-1.5
+
+**Decision:** Have GPT-4o generate the actual prompt text for gpt-image-1.5 instead of using predefined templates
+
+**Date:** 2025-12-23 (Sprint 10)
+
+**Problem:**
+Sprint 8's `DynamicPromptBuilder` used layout-based templates (sticky-notes, app-screenshot, banner). While an improvement over hardcoded demo prompts, it still constrained prompts to our predefined categories. Analysis of generation quality revealed:
+
+1. **Hardcoded demo prompts work** because they have exact spatial relationships: "immediately to the right of checkmark icon", "3 checkmark icons are ANCHOR POINTS"
+2. **Template-based prompts are too generic**: "next to icons", "centered in button"
+3. **Black rectangles and missing icons** occur when gpt-image-1.5 can't figure out what to put in edit regions due to vague instructions
+
+**Solution:**
+Created `PromptEngineeringService` (`src/server/services/promptEngineeringService.ts`) that:
+
+1. Takes image analysis (text regions, layout, translations) + the image itself
+2. Sends to GPT-4o with a "meta-prompt" asking it to WRITE a prompt for gpt-image-1.5
+3. GPT-4o generates a prompt with:
+   - Exact visual structure description
+   - Spatial relationships ("immediately to the right of [icon]")
+   - Container relationships ("centered inside [button]")
+   - Anchor points ("checkmark icon at start of each bullet")
+   - Comprehensive preservation list (icons, backgrounds, UI elements)
+4. Returns prompt that reads like a human expert wrote it for this exact image
+
+**Meta-Prompt Pattern:**
+```text
+"You are an expert prompt engineer specializing in image editing AI models.
+
+Your task is to write a DETAILED, SPECIFIC prompt for gpt-image-1.5...
+
+Write the prompt as if a human expert carefully analyzed this exact image
+and crafted a custom prompt for it. Be SPECIFIC, not generic."
+```
+
+**Integration:**
+- Added `enhancedPrompt: z.boolean().default(true)` to `generateAllWithVision` schema
+- When enabled (default), uses `PromptEngineeringService` instead of `DynamicPromptBuilder`
+- Falls back to template-based prompts if GPT-4o fails
+
+**Key Design Decisions:**
+- Factory pattern with singleton for efficiency
+- Interface segregation (`PromptEngineeringInput`, `PromptEngineeringResult`)
+- Optional `imageBuffer` parameter for enhanced analysis (image context)
+- Graceful fallback to template-based prompts on failure
+
+**Trade-offs:**
+- Additional GPT-4o call per locale (increases latency and cost)
+- Prompt quality depends on GPT-4o's interpretation
+- Less predictable prompt structure
+
+**Impact:** Prompts are now as specific as hand-crafted ones for ANY image. World-class localization quality.
+
+---
+
+### ED-057: Cancel Button UX for Non-Cancellable API Operations
+
+**Decision:** Show "Cancelling..." state with explanatory message when cancel is clicked, since OpenAI API has no cancel endpoint
+
+**Date:** 2025-12-23 (Sprint 10)
+
+**Problem:**
+OpenAI's image generation API has no cancel endpoint. Once a generation starts, it must complete. Users clicking "Cancel" expect the operation to stop, but:
+
+1. The API call continues running
+2. The server must wait for completion
+3. Results are received even though user "cancelled"
+
+**Solution:**
+Implemented honest UX that sets correct expectations:
+
+1. Cancel button changes to "Cancelling..." with spinner when clicked
+2. Button is disabled to prevent multiple clicks
+3. Message appears: "Server must complete current operation. Results will be discarded."
+4. Results are discarded client-side even though server completes
+
+**Implementation:**
+```typescript
+// page.tsx
+const [isCancelling, setIsCancelling] = useState(false);
+
+const handleCancelGeneration = () => {
+  setIsCancelling(true);
+  cancelledRef.current = true;
+  setIsGenerating(false);
+  // Results discarded when they arrive via cancelledRef check
+};
+```
+
+**UI States:**
+- Normal: Red "Cancel Generation" button with XCircle icon
+- Cancelling: Gray "Cancelling..." button with Loader2 spinner, disabled
+- Message below: "Server must complete current operation. Results will be discarded."
+
+**Rationale:**
+- Honest UX prevents confusion
+- Users understand what's happening
+- Better than fake instant cancel that would confuse when results appear later
+
+**Impact:** Clear user expectations. No confusion about cancellation behavior.
+
+---
+
 ## How to Add Decisions
 
 When making a decision not covered by the spec:

@@ -18,11 +18,11 @@
 | Sprint 7 | **COMPLETE** | 2025-12-18 |
 | Sprint 8 | **COMPLETE** | 2025-12-22 |
 | Sprint 9 | **COMPLETE** | 2025-12-22 |
-| Sprint 10 | PLANNED | - |
+| Sprint 10 | **IN PROGRESS** | 2025-12-23 |
 
-Current State: VERIFICATION & AUTO-MASK IMPLEMENTED
+Current State: AI-POWERED PROMPT ENGINEERING PIPELINE
 
-**Achievement:** Sprint 9 adds professional-grade quality assurance with translation verification and automatic mask suggestion, making LocaleLens a complete, contest-winning solution.
+**Achievement:** Sprint 10 introduces the key innovation: using GPT-4o to WRITE the prompts for gpt-image-1.5. Instead of hardcoded templates, we now have GPT-4o analyze each image and generate image-specific, contextually-aware prompts. This is the difference between generic templates and human-expert-level precision.
 
 ### Completed (Sprints 0-9)
 
@@ -54,12 +54,13 @@ Current State: VERIFICATION & AUTO-MASK IMPLEMENTED
 - ✅ **Semantic position detection for text regions** — Sprint 9 REFINEMENT
 - ✅ **Auto-mask "starting point" toast message** — Sprint 9 UX IMPROVEMENT
 
-### Planned (Sprint 10)
+### In Progress (Sprint 10)
 
-- 🔄 Dynamic prompt generation (remove predefined templates)
-- 🔄 Mode toggle polish and testing
+- ✅ **PromptEngineeringService** — GPT-4o writes prompts for gpt-image-1.5 (Sprint 10 KEY INNOVATION)
+- ✅ **Cancel button UX improvement** — Shows "Cancelling..." with explanatory message
 - 🔄 README overhaul with universal image support
 - 🔄 Diverse image testing and documentation
+- 🔄 Demo video/GIF creation
 
 ---
 
@@ -1384,133 +1385,138 @@ Added line-count constraint to translation prompt:
 
 ---
 
-## 12) Sprint 10 — Contest Submission Polish
+## 12) Sprint 10 — AI-Powered Prompt Engineering Pipeline
 
-> **STATUS: PLANNED**
+> **STATUS: IN PROGRESS** (2025-12-23)
 > **PRIORITY: HIGH - FINAL SUBMISSION**
 
 ### 12.1 Sprint Goal
 
-Polish the complete solution and prepare for contest submission with compelling documentation and demos.
+Transform LocaleLens from "good prompts" to "world-class prompts" by having GPT-4o WRITE the prompts for gpt-image-1.5. This is the key innovation that makes prompts as specific as hand-crafted ones.
 
-### 12.2 Scope (Must Ship)
+### 12.2 Key Innovation: PromptEngineeringService (IMPLEMENTED)
 
-#### 1) Dynamic Prompt Generation (ARCHITECTURAL UPGRADE)
+**Problem Identified:**
 
-**Current limitation:** `DynamicPromptBuilder` uses predefined layout templates (sticky-notes, app-screenshot, banner, etc.). While GPT-4o picks the category, we still constrain it to our predefined templates.
+- Hardcoded demo prompts work because they have exact spatial relationships: "after checkmark icon", "3 checkmark icons are ANCHOR POINTS"
+- Dynamic prompts from Sprint 8 are too generic: "next to icons", "centered in button"
+- Black rectangles and missing icons occur when gpt-image-1.5 can't figure out what to put in edit regions
 
-**World-class solution:** Have GPT-4o generate contextual preservation instructions on-the-fly based on what it actually sees.
-
-**File:** `src/server/domain/services/dynamicPromptBuilder.ts`
-
-**Change:** Instead of:
-
-```text
-GPT-4o → picks "sticky-notes" → we use STICKY_NOTES_TEMPLATE
-```
-
-Do this:
+**Solution:**
+Instead of templates, we ask GPT-4o to WRITE the prompt for gpt-image-1.5:
 
 ```text
-GPT-4o → analyzes image → generates custom preservation instructions
+Before: GPT-4o → picks "sticky-notes" → we use STICKY_NOTES_TEMPLATE
+After:  GPT-4o → analyzes image → WRITES custom prompt with spatial relationships
 ```
 
-**New flow in TextDetectionService:**
+**File Created:** `src/server/services/promptEngineeringService.ts`
+
+**Key Interfaces:**
 
 ```typescript
-// Add to ImageAnalysis:
-export interface ImageAnalysis {
-  // ... existing fields ...
+interface PromptEngineeringInput {
+  analysis: ImageAnalysis;
+  translations: TranslatedText[];
+  locale: LocaleId;
+  imageBuffer?: Buffer;  // For enhanced analysis with image context
+  enhancedMode?: boolean;
+}
 
-  /** GPT-4o generated preservation instructions specific to THIS image */
-  preservationInstructions: string;
-
-  /** GPT-4o generated localization guidance specific to THIS image */
-  localizationGuidance: string;
+interface PromptEngineeringResult {
+  prompt: string;              // GPT-4o generated prompt for gpt-image-1.5
+  confidence: number;          // 0-1 confidence level
+  preservationElements: string[];
+  anchorPoints: string[];
+  enhancedAnalysisUsed: boolean;
 }
 ```
 
-**Vision prompt addition:**
+**How It Works:**
 
-```text
-"Based on what you see in this specific image, write:
-1. PRESERVATION_INSTRUCTIONS: What must be preserved exactly?
-   (e.g., 'The 4 colored sticky notes must keep their exact colors
-   and positions. The white dumbbell in background must not change.')
-2. LOCALIZATION_GUIDANCE: How should text be replaced?
-   (e.g., 'Each note contains one phrase. Replace text centered on
-   each note, matching the bold black handwritten style.')"
-```
+1. Takes image analysis (text regions, layout, translations)
+2. Sends to GPT-4o with meta-prompt asking it to write a specific prompt
+3. GPT-4o generates prompt with:
+   - Exact visual structure description
+   - Spatial relationships ("immediately to the right of [icon]")
+   - Container relationships ("centered inside [button]")
+   - Anchor points ("checkmark icon at start of each bullet")
+   - Preservation list (icons, backgrounds, UI elements)
+4. Returns prompt that reads like a human expert wrote it for this exact image
 
-**Benefits:**
+**Integration:**
 
-- No predefined categories limiting the system
-- GPT-4o describes exactly what IT sees, not what we expect
-- Works for ANY image type, even ones we never imagined
-- Truly dynamic, truly universal
+- Added `enhancedPrompt: z.boolean().default(true)` to `generateAllWithVision` schema
+- When enabled (default), uses `PromptEngineeringService` instead of `DynamicPromptBuilder`
+- Falls back to template-based prompts if GPT-4o fails
 
-#### 2) Mode Toggle (SIMPLIFIED)
+### 12.3 Cancel Button UX (IMPLEMENTED)
 
-**Feature:** Remove "Demo Mode" - Vision pipeline IS the primary mode
+**Problem:** OpenAI's API has no cancel endpoint - once a generation starts, it must complete.
 
-Since Sprint 9 adds verification and auto-mask, the Vision pipeline should be reliable enough to be the default. Demo Mode becomes unnecessary complexity.
+**Solution:**
 
-#### 3) README Overhaul
+- Cancel button shows "Cancelling..." with spinner when clicked
+- Message below: "Server must complete current operation. Results will be discarded."
+- Sets `isCancelling` state to true, disables button, shows explanatory text
+- Results are discarded client-side even though server completes
 
-**File:** `README.md`
+**Files Modified:**
 
-Update with:
+- `src/app/project/[id]/page.tsx` — Added `isCancelling` state
+- `src/components/project/sidebar/GenerateSidebar.tsx` — Cancel button states
+- `src/components/project/steps/GenerateStep.tsx` — Passed through prop
 
-- Universal image support (no predefined templates)
+### 12.4 Remaining Scope
+
+#### README Overhaul
+
+- Universal image support (not just demo screenshots)
 - Two-model pipeline explanation (GPT-4o + gpt-image-1.5)
-- Updated screenshots showing diverse image support
-- Architecture diagram showing dynamic prompt generation
-- Translation accuracy and verification metrics
+- Architecture diagram showing prompt engineering flow
+- Updated screenshots with diverse images
 
-#### 4) Demo Video/GIF
-
-Create compelling demo showing:
+#### Demo Video/GIF
 
 - Upload custom image
 - Automatic text detection
-- Translation preview
-- Streaming generation
+- Auto-mask suggestion
+- Streaming generation with progressive preview
 - 0% drift result
-- Translation accuracy verification
+- Translation verification
 
-#### 5) Diverse Image Testing
+#### Diverse Image Testing
 
-Test with multiple image types to prove universal support:
+Test with multiple image types:
 
-- App store screenshots (original use case)
-- Motivational posters (sticky notes)
+- App store screenshots
+- Motivational posters
 - Marketing banners
 - Social media graphics
 - Product packaging
 - Memes / informal graphics
-- Handwritten text images
-- Multi-language source images
 
 Document results in `docs/TESTING_RESULTS.md`
 
-### 12.3 Acceptance Criteria
+### 12.5 Acceptance Criteria
 
-- [ ] Dynamic prompt generation replaces predefined templates
-- [ ] GPT-4o generates image-specific preservation instructions
+- [x] PromptEngineeringService generates image-specific prompts via GPT-4o
+- [x] Cancel button shows "Cancelling..." with explanatory message
 - [ ] README showcases universal image support
 - [ ] Demo video shows full workflow with diverse images
 - [ ] 8+ diverse image types tested successfully
 - [ ] All documentation updated
 - [ ] Repository is judge-ready
-- [ ] No hardcoded assumptions about image content
 
-### 12.4 Deliverables
+### 12.6 Deliverables
 
-| File | Type | Purpose |
-| `README.md` | MODIFY | Complete overhaul |
-| `src/components/project/ModeToggle.tsx` | NEW | Demo/Any Image switch |
-| `docs/TESTING_RESULTS.md` | NEW | Diverse image test results |
-| `docs/demo-assets/` | MODIFY | Add diverse test images |
+| File | Type | Status | Purpose |
+| `src/server/services/promptEngineeringService.ts` | NEW | ✅ DONE | GPT-4o writes prompts for gpt-image-1.5 |
+| `src/server/api/routers/variant.ts` | MODIFY | ✅ DONE | Integration with Vision generation |
+| `src/app/project/[id]/page.tsx` | MODIFY | ✅ DONE | Cancel button state management |
+| `src/components/project/sidebar/GenerateSidebar.tsx` | MODIFY | ✅ DONE | Cancel button UX |
+| `README.md` | MODIFY | 🔄 TODO | Complete overhaul |
+| `docs/TESTING_RESULTS.md` | NEW | 🔄 TODO | Diverse image test results |
 
 ---
 

@@ -10,91 +10,86 @@
 
 | Field | Value |
 | **Last Updated** | 2025-12-23 |
-| **Current Sprint** | Sprint 10 - Contest Submission Polish |
-| **Sprint Status** | PLANNED - Ready to start |
+| **Current Sprint** | Sprint 10 - AI-Powered Prompt Engineering Pipeline |
+| **Sprint Status** | IN PROGRESS - Core innovation implemented |
 | **Blocking Issues** | None |
-| **Next Action** | Dynamic prompt generation, README overhaul, diverse image testing |
+| **Next Action** | README overhaul, diverse image testing, demo video |
 
-### Completed in Last Session (Sprint 9 - COMPLETE)
+### Completed in Current Session (Sprint 10 - IN PROGRESS)
 
-**VerificationService (NEW):**
+**PromptEngineeringService (KEY INNOVATION):**
 
-- `src/server/services/verificationService.ts` — GPT-4o Vision re-read verification
-- Levenshtein distance for fuzzy text matching
+- `src/server/services/promptEngineeringService.ts` — GPT-4o WRITES prompts for gpt-image-1.5
+- Instead of templates, GPT-4o generates image-specific prompts with spatial relationships
+- Includes meta-prompt asking GPT-4o to describe exact visual structure, anchor points, preservation elements
+- Falls back to template-based prompts if GPT-4o fails
+- Factory pattern: `getPromptEngineeringService()`, `createPromptEngineeringService()`
+
+**Why This Matters:**
+
+- Hardcoded demo prompts work because they have exact spatial relationships: "after checkmark icon", "3 checkmark icons are ANCHOR POINTS"
+- Dynamic prompts were too generic: "next to icons", "centered in button"
+- NOW: GPT-4o generates prompts AS SPECIFIC as hand-crafted ones for ANY image
+
+**Integration:**
+
+- `variant.ts` modified to use `PromptEngineeringService` when `enhancedPrompt: true` (default)
+- Added `enhancedPrompt: z.boolean().default(true)` to generateAllWithVision schema
+
+**Cancel Button UX:**
+
+- Added `isCancelling` state to page.tsx
+- Cancel button shows "Cancelling..." with spinner
+- Message: "Server must complete current operation. Results will be discarded."
+- OpenAI API has no cancel endpoint, so this sets correct user expectations
+
+**Files Created/Modified:**
+
+- `src/server/services/promptEngineeringService.ts` — NEW (460+ lines)
+- `src/server/api/routers/variant.ts` — MODIFIED (added import, schema option, integration)
+- `src/app/project/[id]/page.tsx` — MODIFIED (isCancelling state)
+- `src/components/project/sidebar/GenerateSidebar.tsx` — MODIFIED (cancel button UX)
+- `src/components/project/steps/GenerateStep.tsx` — MODIFIED (pass through isCancelling)
+
+### Sprint 9 Context (Previous Session - COMPLETE)
+
+**VerificationService:**
+
+- GPT-4o Vision re-read verification with Levenshtein distance matching
 - Match status thresholds (match >95%, partial 70-95%, mismatch <70%)
-- Overall verification status (pass >85%, warn 60-85%, fail <60%)
-- Factory pattern with interface segregation
 
-**MaskSuggestionService (NEW):**
+**MaskSuggestionService:**
 
-- `src/server/services/maskSuggestionService.ts` — Auto-generate clean rectangular masks
-- Converts bounding boxes to pixel coordinates with padding
-- Region merging DISABLED (keeps separate text elements separate - ED-054)
-- PNG generation with alpha channel (Sharp)
+- Auto-generate clean rectangular masks from detected text regions
+- Region merging disabled (ED-054)
 
-**TranslationService Enhancement:**
+**Auto-Analyze on Upload:**
 
-- Line-count preservation constraint added to prompts
-- Validation with warning logging for count mismatches
+- Analysis triggers automatically when base image is uploaded (ED-052)
 
-**Database Updates:**
+### What Remains for Sprint 10
 
-- Added `translationAccuracy`, `verificationStatus`, `verificationDetails` to Variant model
-- `updateVerification` method in repository
-
-**API Endpoints (NEW):**
-
-- `variant.verify` — Verify translation accuracy for a generated variant
-- `project.getSuggestedMask` — Get auto-generated mask from detected regions
-- `project.applySuggestedMask` — Apply suggested mask to project
-
-**UI Updates:**
-
-- `VerificationBadge` component with color-coded accuracy display
-- "Verify Translation" button in ResultsSidebar
-- "Use Suggested Mask" button in MaskSidebar (when analysis available)
-- Translation Accuracy displayed alongside Drift Score
-- Toast message: "Auto-mask applied (X regions) - This is a starting point" (ED-053)
-
-**Sprint 9 Refinements (Same Session):**
-
-- Auto-analyze on image upload (ED-052) — Analysis triggers when base image is uploaded
-- Semantic position detection (ED-051) — GPT-4o uses "left/center/right" instead of coordinates
-- Continue button fix (ED-055) — Refetch project before mask to enable button properly
-- Disabled region merging (ED-054) — Each text region gets its own mask
-- Auto-mask as "starting point" UX (ED-053) — Toast message sets correct expectations
-
-**Quality:**
-
-- TypeScript strict mode passes
-- 55 engineering decisions now documented (ED-001 through ED-055)
-
-### Sprint 8 Context (Previous Session)
-
-**Core Vision Pipeline:**
-
-- `TextDetectionService` — GPT-4o Vision text extraction with bounding boxes
-- `TranslationService` — Dynamic text translation with length constraints
-- `DynamicPromptBuilder` — Layout-aware prompt templates
-- Vision Mode toggle with auto-analyze
-
-### What Sprint 10 Should Cover
-
-- [ ] Remove predefined layout templates from DynamicPromptBuilder
-- [ ] Have GPT-4o generate `preservationInstructions` and `localizationGuidance` dynamically
-- [ ] Test with 8+ diverse image types (app screenshots, posters, banners, memes, etc.)
-- [ ] Update README with universal image support
-- [ ] Create demo video/GIF showing workflow
+- [ ] README overhaul with universal image support
+- [ ] Demo video/GIF showing workflow
+- [ ] Diverse image testing (8+ image types)
+- [ ] Document test results in `docs/TESTING_RESULTS.md`
 - [ ] Final polish and contest submission
 
-### Sprint 10 Architecture Goal (WORLD-CLASS)
+### Sprint 10 Architecture Achievement
 
-Remove predefined layout templates. Have GPT-4o generate:
+**The Key Innovation:**
 
-- `preservationInstructions`: What must stay exactly the same in THIS image
-- `localizationGuidance`: How text should be replaced in THIS image
+```text
+Before: GPT-4o → picks "sticky-notes" → we use STICKY_NOTES_TEMPLATE
+After:  GPT-4o → analyzes image → WRITES custom prompt with spatial relationships
+```
 
-This makes the system truly universal — no hardcoded assumptions about image content.
+GPT-4o generates prompts that describe:
+
+- Exact visual structure ("3 bullet points, each with checkmark icon on left")
+- Spatial relationships ("text starts immediately after checkmark")
+- Anchor points ("checkmarks are position anchors")
+- Preservation list ("all icons, backgrounds, device frame must be preserved")
 
 ---
 
@@ -118,25 +113,47 @@ Read these files IN ORDER to understand the project:
 
 After reading, confirm:
 - Sprints 0-9 are COMPLETE
+- Sprint 10 is IN PROGRESS (PromptEngineeringService implemented)
 - You understand the two-model pipeline: GPT-4o Vision + gpt-image-1.5
 - You understand the verification and auto-mask features (Sprint 9)
-- You're ready to start Sprint 10
+- You're ready to continue Sprint 10
 
-## Step 2: What's Already Built (Sprints 8-9 - COMPLETE)
+## Step 2: What's Already Built (Sprints 8-10)
+
+### AI-Powered Prompt Engineering (Sprint 10 - IN PROGRESS):
+
+**Key Innovation - PromptEngineeringService:**
+- `src/server/services/promptEngineeringService.ts` - GPT-4o WRITES prompts for gpt-image-1.5
+- Instead of templates, GPT-4o generates image-specific prompts with spatial relationships
+- Meta-prompt asks GPT-4o to describe exact visual structure, anchor points, preservation elements
+- Falls back to template-based prompts if GPT-4o fails
+- Factory pattern: `getPromptEngineeringService()`, `createPromptEngineeringService()`
+
+**Why This Matters:**
+- Hardcoded demo prompts work because they have exact spatial relationships
+- Dynamic prompts were too generic ("next to icons", "centered in button")
+- NOW: GPT-4o generates prompts AS SPECIFIC as hand-crafted ones for ANY image
+
+**Integration:**
+- `variant.generateAllWithVision` uses PromptEngineeringService when `enhancedPrompt: true` (default)
+
+**Cancel Button UX:**
+- Cancel button shows "Cancelling..." with spinner
+- Message: "Server must complete current operation. Results will be discarded."
 
 ### Vision Pipeline (Sprint 8):
 
 **Services:**
 - `src/server/services/textDetectionService.ts` - GPT-4o Vision text extraction (uses semantic positions)
 - `src/server/services/translationService.ts` - Dynamic translation with length constraints
-- `src/server/domain/services/dynamicPromptBuilder.ts` - Layout-aware prompt templates
+- `src/server/domain/services/dynamicPromptBuilder.ts` - Layout-aware prompt templates (fallback)
 
 **API Endpoints:**
 - `project.analyzeImage` - Analyze image with GPT-4o Vision (auto-runs on upload)
 - `project.getImageAnalysis` - Retrieve stored analysis
 - `project.getBaseImage` - Returns image + dimensions for aspect ratio handling
 - `variant.generateWithVision` - Single locale Vision generation
-- `variant.generateAllWithVision` - Batch Vision generation
+- `variant.generateAllWithVision` - Batch Vision generation (uses PromptEngineeringService)
 
 ### Verification & Auto-Mask (Sprint 9):
 
@@ -154,39 +171,25 @@ After reading, confirm:
 - "Use Suggested Mask" button in MaskSidebar (shows when analysis available)
 - "Verify Translation" button in ResultsSidebar
 - VerificationBadge showing accuracy percentage with color coding
+- Cancel button shows "Cancelling..." with explanatory message
 - Toast message on auto-mask: "This is a starting point — refine if needed"
 - Dynamic canvas sizing (works with ANY image resolution)
 
-## Step 3: Your Mission - Sprint 10
+## Step 3: Your Mission - Continue Sprint 10
 
 **CONTEST DEADLINE: January 3, 2026**
 
-Sprint 10 focuses on final polish and contest submission:
+Sprint 10 remaining work:
 
-### 1) Dynamic Prompt Generation (ARCHITECTURAL UPGRADE)
-File: `src/server/domain/services/dynamicPromptBuilder.ts`
-
-Currently uses predefined layout templates (sticky-notes, app-screenshot, banner, etc.).
-
-GOAL: Have GPT-4o generate preservation/localization instructions dynamically:
-```typescript
-// Add to ImageAnalysis in TextDetectionService:
-{
-  preservationInstructions: "The 4 colored sticky notes must keep their exact colors...",
-  localizationGuidance: "Each note contains one phrase. Replace text centered..."
-}
-```
-
-This makes the system truly universal — works for ANY image type.
-
-### 2) README Overhaul
+### 1) README Overhaul
 
 - Update with universal image support (not just demo screenshots)
 - Explain two-model pipeline (GPT-4o + gpt-image-1.5)
+- Explain prompt engineering innovation (GPT-4o writes prompts)
 - Updated screenshots showing diverse image support
 - Architecture diagram
 
-### 3) Diverse Image Testing
+### 2) Diverse Image Testing
 
 Test with multiple image types to prove universal support:
 
@@ -327,3 +330,4 @@ The goal is that ANY AI can pick up exactly where you left off.
 | 2025-12-22 | 1.2 | Bug fixes: mask aspect ratio, Vision auto-analyze, Turbopack build |
 | 2025-12-22 | 1.3 | Sprint 9 COMPLETE - VerificationService, MaskSuggestionService implemented |
 | 2025-12-23 | 1.4 | Sprint 9 refinements: semantic positions, auto-analyze on upload, toast message, Continue button fix |
+| 2025-12-23 | 1.5 | Sprint 10 IN PROGRESS - PromptEngineeringService (GPT-4o writes prompts for gpt-image-1.5), cancel button UX |
