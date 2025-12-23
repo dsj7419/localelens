@@ -16,10 +16,17 @@
 | Sprint 5 | **COMPLETE** | 2025-12-18 |
 | Sprint 6 | **COMPLETE** | 2025-12-18 |
 | Sprint 7 | **COMPLETE** | 2025-12-18 |
+| Sprint 8 | **IN PROGRESS** | 2025-12-22 |
+| Sprint 9 | PLANNED | - |
+| Sprint 10 | PLANNED | - |
 
-Current State: CONTEST READY
+Current State: CRITICAL UPGRADE IN PROGRESS
 
-All core functionality complete and working:
+**Problem Identified:** The current system only works with the pre-defined demo app screenshot. When users upload custom images, the system sends hardcoded translations (e.g., "Recordatorios con un toque") that don't match the actual image content. The AI then creates checkmarks and UI elements that don't exist in the original image.
+
+**Solution:** Implement Vision-powered text detection to make LocaleLens work with ANY image.
+
+### Completed (Sprints 0-7)
 
 - ✅ Full localization pipeline: Upload → Mask → Generate → Results
 - ✅ SOLID/SRP architecture with clean separation of concerns
@@ -32,6 +39,13 @@ All core functionality complete and working:
 - ✅ Export suite: ZIP bundle, 2×2 montage
 - ✅ Keyboard shortcuts and visual polish
 - ✅ TypeScript strict mode passes
+
+### In Progress (Sprints 8-10)
+
+- 🔄 Vision-powered text detection (GPT-4o)
+- 🔄 Dynamic prompt generation from detected content
+- 🔄 Translation verification loop
+- 🔄 Support for ANY image, not just demo screenshots
 
 ---
 
@@ -929,7 +943,417 @@ LocaleLens is "1st prize ready" when:
 
 ---
 
-## 12) Future Enhancements (Post-Contest)
+## 10) Sprint 8 — CRITICAL: Vision-Powered Text Detection Pipeline
+
+> **STATUS: IN PROGRESS** (2025-12-22)
+> **PRIORITY: HIGHEST - BLOCKING CONTEST WIN**
+> **REQUIREMENT: Make LocaleLens work with ANY image, not just demo screenshots**
+
+### 10.1 Sprint Goal
+
+Transform LocaleLens from a "demo-only tool" into a **universal image localization tool** by implementing vision-powered text detection that works with any uploaded image.
+
+### 10.2 The Problem (Root Cause Analysis)
+
+**Current Bug Behavior:**
+When users upload a custom image (e.g., motivational poster "YOU ARE STRONGER THAN YOU THINK"):
+
+1. The system sends HARDCODED demo translations: "Recordatorios con un toque", "Compártelo con tu equipo"
+2. The prompts reference "checkmarks", "bullets", "CTA buttons" that don't exist
+3. The AI CREATES these elements because the prompt tells it to
+4. Result: Completely wrong output with phantom UI elements
+
+**Root Cause:** `LocalePlanService` uses `LOCALIZED_COPY` with fixed translations for ONE specific demo image.
+
+**Evidence (from generated outputs):**
+
+- Spanish output shows "Recordatorios con un toque" with green checkmarks ON TOP of sticky notes
+- French output shows "Partagez avec votre équipe" with checkmarks
+- Arabic output shows demo Arabic text overlaid on white card
+
+### 10.3 The Solution: Two-Step "Inspector + Artist" Pipeline
+
+```text
+┌─────────────────────────────────────────────────────────────────────────┐
+│                     VISION-POWERED PIPELINE                              │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│   Step 1: INSPECTOR (GPT-4o Vision)                                      │
+│   ┌────────────────────────────────────────────────────────────────┐     │
+│   │ Input: Base image                                               │     │
+│   │ Output: {                                                       │     │
+│   │   textRegions: [                                                │     │
+│   │     { text: "YOU ARE", bbox: {x, y, w, h}, style: "bold" },    │     │
+│   │     { text: "STRONGER", bbox: {...}, style: "bold" },          │     │
+│   │     ...                                                         │     │
+│   │   ],                                                            │     │
+│   │   layout: "sticky-notes" | "app-screenshot" | "banner",        │     │
+│   │   surfaceTexture: "colored paper notes on gray background"     │     │
+│   │ }                                                               │     │
+│   └────────────────────────────────────────────────────────────────┘     │
+│                              │                                           │
+│                              ▼                                           │
+│   Step 2: TRANSLATOR (GPT-4o)                                           │
+│   ┌────────────────────────────────────────────────────────────────┐     │
+│   │ Input: Detected text + target locale                           │     │
+│   │ Output: {                                                       │     │
+│   │   translations: [                                               │     │
+│   │     { original: "YOU ARE", translated: "ERES MÁS" },           │     │
+│   │     { original: "STRONGER", translated: "FUERTE" },            │     │
+│   │     ...                                                         │     │
+│   │   ]                                                             │     │
+│   │ }                                                               │     │
+│   └────────────────────────────────────────────────────────────────┘     │
+│                              │                                           │
+│                              ▼                                           │
+│   Step 3: PROMPT BUILDER                                                 │
+│   ┌────────────────────────────────────────────────────────────────┐     │
+│   │ Input: Translations + layout + surface texture                 │     │
+│   │ Output: Dynamic prompt tailored to THIS specific image         │     │
+│   │                                                                 │     │
+│   │ "You are localizing a motivational poster with 4 sticky notes  │     │
+│   │  (green, pink, orange, yellow). Replace text:                  │     │
+│   │  Note 1 (green): 'YOU ARE' → 'ERES MÁS'                       │     │
+│   │  Note 2 (pink): 'STRONGER' → 'FUERTE'                         │     │
+│   │  ..."                                                          │     │
+│   └────────────────────────────────────────────────────────────────┘     │
+│                              │                                           │
+│                              ▼                                           │
+│   Step 4: ARTIST (gpt-image-1.5)                                        │
+│   ┌────────────────────────────────────────────────────────────────┐     │
+│   │ Input: Base image + mask + dynamic prompt                      │     │
+│   │ Output: Localized image variant                                │     │
+│   │ Features: Streaming, pixel-perfect composite, 0% drift         │     │
+│   └────────────────────────────────────────────────────────────────┘     │
+│                                                                          │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### 10.4 Scope (Must Ship)
+
+#### 1) TextDetectionService (NEW)
+
+**File:** `src/server/services/textDetectionService.ts`
+
+```typescript
+export interface TextRegion {
+  text: string;
+  boundingBox: { x: number; y: number; width: number; height: number };
+  confidence: number;
+  style?: {
+    fontWeight?: "normal" | "bold";
+    alignment?: "left" | "center" | "right";
+    color?: string;
+  };
+}
+
+export interface ImageAnalysis {
+  textRegions: TextRegion[];
+  layout: "sticky-notes" | "app-screenshot" | "banner" | "poster" | "unknown";
+  surfaceTexture: string;
+  dominantColors: string[];
+}
+
+export interface ITextDetectionService {
+  analyzeImage(imageBuffer: Buffer): Promise<ImageAnalysis>;
+}
+```
+
+Uses GPT-4o Vision with structured JSON output to detect:
+
+- All text regions with bounding boxes
+- Layout type (sticky notes, app screenshot, banner, etc.)
+- Surface texture description
+- Style hints (font weight, alignment)
+
+#### 2) TranslationService (NEW)
+
+**File:** `src/server/services/translationService.ts`
+
+```typescript
+export interface TranslatedText {
+  original: string;
+  translated: string;
+  locale: LocaleId;
+}
+
+export interface ITranslationService {
+  translateTexts(
+    texts: string[],
+    targetLocale: LocaleId
+  ): Promise<TranslatedText[]>;
+}
+```
+
+Uses GPT-4o to translate detected text while:
+
+- Preserving meaning
+- Respecting length constraints (similar length to original)
+- Handling RTL languages correctly
+
+#### 3) DynamicPromptBuilder (NEW)
+
+**File:** `src/server/domain/services/dynamicPromptBuilder.ts`
+
+Builds prompts based on actual image content:
+
+```typescript
+export interface IDynamicPromptBuilder {
+  buildPrompt(
+    analysis: ImageAnalysis,
+    translations: TranslatedText[],
+    locale: LocaleId
+  ): string;
+}
+```
+
+Key features:
+
+- Layout-aware prompt templates (sticky notes, screenshots, banners)
+- Includes actual translated text (not hardcoded copy)
+- Surface texture preservation instructions
+- Position anchoring based on detected regions
+
+#### 4) Database Schema Updates
+
+**File:** `prisma/schema.prisma`
+
+```prisma
+model ImageAnalysis {
+  id           String   @id @default(cuid())
+  projectId    String   @unique
+  project      Project  @relation(fields: [projectId], references: [id])
+  textRegions  Json     // Array of TextRegion
+  layout       String   // Layout type
+  surfaceTexture String
+  analyzedAt   DateTime @default(now())
+}
+```
+
+#### 5) Workflow Integration
+
+**File:** `src/server/api/routers/project.ts`
+
+Add new mutation:
+
+```typescript
+analyzeImage: publicProcedure
+  .input(z.object({ projectId: z.string() }))
+  .mutation(async ({ input }) => {
+    // 1. Load base image
+    // 2. Call TextDetectionService
+    // 3. Store analysis in database
+    // 4. Return analysis results
+  })
+```
+
+#### 6) UI Updates
+
+**Files:** `src/components/project/steps/`, `src/app/project/[id]/page.tsx`
+
+- Add "Analyze" button after image upload
+- Display detected text regions
+- Show suggested mask areas based on detection
+- Allow user to confirm/edit detected text before generation
+
+### 10.5 Out of Scope (Explicit)
+
+- Automatic mask generation (Sprint 9)
+- Translation verification loop (Sprint 9)
+- Full "Any Image" mode toggle (Sprint 10)
+- Custom text input by users (Future)
+
+### 10.6 Acceptance Criteria
+
+- [ ] `TextDetectionService` extracts text from uploaded images with >90% accuracy
+- [ ] `TranslationService` translates detected text to all 3 locales
+- [ ] `DynamicPromptBuilder` creates image-specific prompts (not hardcoded)
+- [ ] Generated outputs match the actual image content
+- [ ] Demo project still works (backwards compatible)
+- [ ] TypeScript strict mode passes
+
+### 10.7 Deliverables
+
+| File | Type | Purpose |
+| `src/server/services/textDetectionService.ts` | NEW | GPT-4o Vision text extraction |
+| `src/server/services/translationService.ts` | NEW | Text translation |
+| `src/server/domain/services/dynamicPromptBuilder.ts` | NEW | Image-aware prompts |
+| `src/server/api/routers/project.ts` | MODIFY | Add analyzeImage mutation |
+| `prisma/schema.prisma` | MODIFY | Add ImageAnalysis model |
+| `src/components/project/steps/UploadStep.tsx` | MODIFY | Add analyze button |
+| `src/hooks/useProjectMutations.ts` | MODIFY | Add analyze mutation |
+
+### 10.8 Success Metrics
+
+| Metric | Before | After |
+| Custom image support | ❌ Broken | ✅ Working |
+| Text detection accuracy | N/A | >90% |
+| Prompt relevance | Hardcoded | Dynamic |
+| Contest differentiation | Basic | Advanced |
+
+---
+
+## 11) Sprint 9 — Translation Verification & Auto-Mask
+
+> **STATUS: PLANNED**
+> **PRIORITY: HIGH - CONTEST DIFFERENTIATOR**
+
+### 11.1 Sprint Goal
+
+Add professional-grade quality assurance: verify translations actually rendered correctly, and suggest mask regions automatically.
+
+### 11.2 Scope (Must Ship)
+
+#### 1) Translation Verification Loop (NEW)
+
+**File:** `src/server/services/verificationService.ts`
+
+After generating a variant:
+
+1. Send generated image back to GPT-4o Vision
+2. Extract the rendered text
+3. Compare to expected translations
+4. Calculate "Translation Accuracy" percentage
+5. Flag mismatches for user review
+
+```typescript
+export interface VerificationResult {
+  locale: LocaleId;
+  expected: TranslatedText[];
+  actual: string[];
+  accuracy: number; // 0-100%
+  mismatches: Array<{
+    expected: string;
+    actual: string;
+    position: number;
+  }>;
+}
+```
+
+#### 2) Auto-Mask Suggestion (NEW)
+
+**File:** `src/server/services/maskSuggestionService.ts`
+
+Use detected text regions to automatically suggest mask areas:
+
+```typescript
+export interface MaskSuggestion {
+  regions: Array<{
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    padding: number; // Recommended padding
+    label: string; // "YOU ARE", etc.
+  }>;
+  combinedMaskBuffer: Buffer; // Pre-generated mask
+}
+```
+
+#### 3) UI Enhancements
+
+- Display "Translation Accuracy: 98%" alongside drift score
+- Show verification mismatches in results
+- "Accept Suggested Mask" button in mask editor
+- Visual overlay of detected text regions
+
+### 11.3 Acceptance Criteria
+
+- [ ] Verification loop detects rendering errors with >95% accuracy
+- [ ] Translation Accuracy metric displayed in results
+- [ ] Auto-mask suggestion covers all detected text regions
+- [ ] Users can accept or modify suggested masks
+- [ ] Quality metrics differentiate LocaleLens from competitors
+
+### 11.4 Deliverables
+
+| File | Type | Purpose |
+| `src/server/services/verificationService.ts` | NEW | Re-read and verify |
+| `src/server/services/maskSuggestionService.ts` | NEW | Auto-mask from regions |
+| `src/components/project/VerificationBadge.tsx` | NEW | Accuracy display |
+| `src/components/project/MaskSuggestion.tsx` | NEW | Suggested mask overlay |
+
+---
+
+## 12) Sprint 10 — Contest Submission Polish
+
+> **STATUS: PLANNED**
+> **PRIORITY: HIGH - FINAL SUBMISSION**
+
+### 12.1 Sprint Goal
+
+Polish the complete solution and prepare for contest submission with compelling documentation and demos.
+
+### 12.2 Scope (Must Ship)
+
+#### 1) Mode Toggle
+
+**Feature:** "Demo Mode" vs "Any Image" mode toggle
+
+- Demo Mode: Uses hardcoded LOCALIZED_COPY (current behavior, guaranteed to work)
+- Any Image Mode: Uses Vision pipeline (new behavior, works with custom images)
+
+This ensures:
+
+- Judges can see the "ideal" demo output
+- Users can try their own images
+- Both paths are well-tested
+
+#### 2) README Overhaul
+
+**File:** `README.md`
+
+Update with:
+
+- New "Any Image" capability
+- Two-model pipeline explanation (GPT-4o + gpt-image-1.5)
+- Updated screenshots showing custom image support
+- Architecture diagram
+- Translation accuracy metrics
+
+#### 3) Demo Video/GIF
+
+Create compelling demo showing:
+
+- Upload custom image
+- Automatic text detection
+- Translation preview
+- Streaming generation
+- 0% drift result
+- Translation accuracy verification
+
+#### 4) Diverse Image Testing
+
+Test with multiple image types:
+
+- App store screenshots (original use case)
+- Motivational posters (sticky notes)
+- Marketing banners
+- Social media graphics
+- Product packaging
+
+Document results in `docs/TESTING_RESULTS.md`
+
+### 12.3 Acceptance Criteria
+
+- [ ] Mode toggle works smoothly
+- [ ] README is compelling and accurate
+- [ ] Demo video shows full workflow
+- [ ] 5+ diverse images tested successfully
+- [ ] All documentation updated
+- [ ] Repository is judge-ready
+
+### 12.4 Deliverables
+
+| File | Type | Purpose |
+| `README.md` | MODIFY | Complete overhaul |
+| `src/components/project/ModeToggle.tsx` | NEW | Demo/Any Image switch |
+| `docs/TESTING_RESULTS.md` | NEW | Diverse image test results |
+| `docs/demo-assets/` | MODIFY | Add diverse test images |
+
+---
+
+## 13) Future Enhancements (Post-Contest)
 
 These features were considered but not implemented for the contest deadline. They represent potential future development directions:
 

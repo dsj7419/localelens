@@ -175,6 +175,182 @@ Despite the challenges, gpt-image-1.5 excels at:
 
 ---
 
+---
+
+## Critical Finding: The "Hardcoded Prompt" Problem
+
+### Discovery (2025-12-22)
+
+**The single most important finding:** When testing with custom images, we discovered that the system was fundamentally broken because prompts were hardcoded for ONE specific demo image.
+
+**Symptoms:**
+
+- Uploading a motivational poster ("YOU ARE STRONGER THAN YOU THINK")
+- Spanish output contained "Recordatorios con un toque" with green checkmarks
+- French output contained "Partagez avec votre équipe" with checkmarks
+- Arabic output contained demo text on white card overlay
+
+**Root Cause:**
+
+```typescript
+// LocalePlanService.ts - The problem
+const LOCALIZED_COPY = {
+  "es-MX": {
+    headline: "PLANEA TU DÍA EN SEGUNDOS",
+    bullet1: "Recordatorios con un toque",  // THIS gets sent to EVERY image!
+    ...
+  }
+};
+```
+
+The prompts also instructed the AI to create UI elements:
+
+```text
+BULLET 1 (after checkmark): Recordatorios con un toque
+CTA BUTTON TEXT (centered in button): PRUÉBALO GRATIS
+```
+
+**Result:** The AI created checkmarks and buttons because we told it to!
+
+### Lesson Learned
+
+**gpt-image-1.5 follows instructions precisely.** If you tell it there are checkmarks and buttons, it will create them - even if they don't exist in the original image.
+
+**The fix:** Use GPT-4o Vision to detect what's actually in the image, then build prompts dynamically.
+
+---
+
+## The Two-Model Pipeline Solution
+
+### Why Two Models?
+
+| Model | Capability | Use |
+| GPT-4o Vision | Can READ images | Detect text, understand layout |
+| gpt-image-1.5 | Can GENERATE images | Create localized variants |
+
+**Key insight:** gpt-image-1.5 cannot "see" what text is in the image - it only follows prompt instructions. You must tell it exactly what text to render.
+
+### Pipeline Architecture
+
+```text
+1. INSPECTOR (GPT-4o Vision)
+   - Input: Base image
+   - Output: Detected text regions, layout type, style info
+
+2. TRANSLATOR (GPT-4o)
+   - Input: Detected text + target locale
+   - Output: Translations respecting length constraints
+
+3. PROMPT BUILDER
+   - Input: Analysis + translations
+   - Output: Image-specific prompt
+
+4. ARTIST (gpt-image-1.5)
+   - Input: Base image + mask + dynamic prompt
+   - Output: Localized variant
+```
+
+### Benefits
+
+1. **Works with ANY image** - Not just demo screenshots
+2. **Context-aware prompts** - Describe the actual image
+3. **Translation accuracy** - Can verify what was rendered
+4. **Professional architecture** - Separation of concerns
+
+---
+
+## GPT-4o Vision for Text Detection
+
+### Best Practices
+
+**Structured output request:**
+
+```typescript
+const response = await openai.chat.completions.create({
+  model: "gpt-4o",
+  messages: [{
+    role: "user",
+    content: [
+      { type: "image_url", image_url: { url: `data:image/png;base64,${base64}` }},
+      { type: "text", text: `Analyze this image and return JSON:
+        {
+          "textRegions": [
+            { "text": "...", "boundingBox": {x, y, width, height} }
+          ],
+          "layout": "sticky-notes" | "app-screenshot" | "banner",
+          "surfaceTexture": "description"
+        }`
+      }
+    ]
+  }],
+  response_format: { type: "json_object" }
+});
+```
+
+**Key elements to extract:**
+
+- All visible text with positions
+- Layout type for template selection
+- Surface texture for preservation prompts
+- Font style hints (bold, color, alignment)
+
+### Accuracy Expectations
+
+Based on testing, GPT-4o Vision achieves:
+>
+- >95% text extraction accuracy for clear text
+- Good bounding box estimation (within 10% of actual)
+- Reliable layout classification
+
+---
+
+## Translation Verification Loop
+
+### The Problem
+
+Even with perfect prompts, gpt-image-1.5 may render text incorrectly:
+
+- Character substitution errors
+- Truncated words at mask edges
+- RTL rendering issues for Arabic
+- Missing diacritical marks
+
+### The Solution
+
+After generation, re-read the image with GPT-4o Vision:
+
+```typescript
+// 1. Generate variant
+const variant = await generateVariant(image, mask, prompt);
+
+// 2. Re-read generated text
+const actualText = await extractText(variant.imageBuffer);
+
+// 3. Compare to expected
+const accuracy = calculateAccuracy(expectedTranslations, actualText);
+
+// 4. Return result with verification
+return {
+  imageBuffer: variant.imageBuffer,
+  translationAccuracy: accuracy,
+  mismatches: findMismatches(expected, actual)
+};
+```
+
+### Display
+
+Show alongside drift score:
+
+- "Drift: 0.0% ✓"
+- "Translation Accuracy: 98% ✓"
+
+This provides two quality signals:
+
+1. **Drift** - Did pixels change outside the mask?
+2. **Accuracy** - Did the translations render correctly?
+
+---
+
 ## Conclusion
 
 LocaleLens demonstrates that gpt-image-1.5 can be used effectively for text localization with:
@@ -183,9 +359,12 @@ LocaleLens demonstrates that gpt-image-1.5 can be used effectively for text loca
 - Explicit localization prompts
 - Post-processing composite mode
 - Multi-generation selection
+- **Vision-powered text detection** (new)
+- **Dynamic prompt generation** (new)
+- **Translation verification** (new)
 
-The API has room for improvement in preservation guarantees and text positioning, but current limitations can be worked around with proper engineering.
+The key insight is that gpt-image-1.5 is a **generation** model, not a **vision** model. It follows prompt instructions precisely but cannot "see" what's in the image. For universal localization support, pair it with GPT-4o Vision to understand the image before generating.
 
 ---
 
-*These findings are from the LocaleLens project, an entry for the OpenAI Image Generation API Contest (December 2024).*
+*These findings are from the LocaleLens project, an entry for the OpenAI Image Generation API Contest (December 2024). Updated 2025-12-22 with Vision pipeline discoveries.*

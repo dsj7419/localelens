@@ -841,6 +841,294 @@ LOCALIZATION RULES (CRITICAL):
 
 ---
 
+## Sprint 8-10 Decisions (Vision-Powered Pipeline)
+
+### ED-035: Vision-Powered Text Detection Pipeline
+
+**Decision:** Use GPT-4o Vision to detect and extract text from uploaded images before generation
+
+**Date:** 2025-12-22
+
+**Problem:**
+The current system only works with one specific demo image because:
+
+1. `LocalePlanService` uses hardcoded `LOCALIZED_COPY` translations
+2. Prompts reference "checkmarks", "bullets", "CTA buttons" that don't exist in other images
+3. When users upload custom images, the AI creates phantom UI elements
+
+**Evidence:**
+
+- Sticky note poster ("YOU ARE STRONGER") generated with checkmark icons and "Recordatorios con un toque" text
+- The system was sending demo app translations to ANY image
+
+**Solution:**
+Implement a "Text Detection Service" using GPT-4o Vision:
+
+```typescript
+interface ImageAnalysis {
+  textRegions: TextRegion[];      // All detected text with bounding boxes
+  layout: ImageLayout;            // "sticky-notes" | "app-screenshot" | etc.
+  surfaceTexture: string;         // Description for preservation prompts
+}
+```
+
+**Rationale:**
+
+- gpt-image-1.5 cannot "read" text - it's a generation model, not vision
+- GPT-4o Vision can extract text, positions, and style information
+- This enables dynamic prompt generation for ANY image
+
+**Impact:** LocaleLens transforms from "demo-only" to "universal localization tool"
+
+---
+
+### ED-036: Two-Step "Inspector + Artist" Architecture
+
+**Decision:** Implement a two-model pipeline: GPT-4o (Inspector) → gpt-image-1.5 (Artist)
+
+**Date:** 2025-12-22
+
+**Architecture:**
+
+```text
+Step 1: INSPECTOR (GPT-4o Vision)
+  - Analyze image
+  - Detect text regions
+  - Identify layout type
+  - Extract style information
+
+Step 2: TRANSLATOR (GPT-4o)
+  - Translate detected text
+  - Respect length constraints
+  - Handle RTL languages
+
+Step 3: PROMPT BUILDER
+  - Build image-specific prompt
+  - Include actual translations
+  - Add preservation instructions
+
+Step 4: ARTIST (gpt-image-1.5)
+  - Generate localized variant
+  - Use streaming for UX
+  - Apply pixel-perfect composite
+```
+
+**Rationale:**
+
+1. **Separation of concerns** - Reading and generating are different tasks
+2. **Right model for each job** - Vision model reads, image model generates
+3. **Better prompts** - Knowing exact text enables precise instructions
+4. **Contest differentiation** - Multi-model pipeline shows sophistication
+
+**Trade-offs:**
+
+- Additional API calls (GPT-4o Vision + GPT-4o translation)
+- Slightly higher latency for first-time analysis
+- More complex architecture
+
+**Impact:** Professional-grade architecture that enables universal image support
+
+---
+
+### ED-037: Dynamic Prompt Generation (vs Hardcoded)
+
+**Decision:** Build prompts dynamically from detected image content, not hardcoded demo copy
+
+**Date:** 2025-12-22
+
+**Before (Broken):**
+
+```typescript
+const LOCALIZED_COPY = {
+  "es-MX": {
+    headline: "PLANEA TU DÍA EN SEGUNDOS",  // Hardcoded!
+    bullet1: "Recordatorios con un toque",   // Wrong for any other image
+    ...
+  }
+};
+```
+
+**After (Fixed):**
+
+```typescript
+interface DynamicPromptBuilder {
+  buildPrompt(
+    analysis: ImageAnalysis,       // From Vision
+    translations: TranslatedText[], // From Translator
+    locale: LocaleId
+  ): string;
+}
+```
+
+**Prompt Template Strategy:**
+
+Layout-aware templates that describe the ACTUAL image:
+
+```typescript
+// For sticky-notes layout
+`You are localizing a motivational poster with ${analysis.textRegions.length} sticky notes.
+Surface: ${analysis.surfaceTexture}
+
+Replace text on each note:
+${translations.map((t, i) => `Note ${i+1}: "${t.original}" → "${t.translated}"`).join('\n')}
+
+CRITICAL: Preserve sticky note colors and positions exactly.`
+```
+
+**Rationale:**
+
+- Prompts that describe the actual image produce correct outputs
+- Hardcoded prompts only work for one specific image
+- Dynamic prompts enable universal support
+
+**Impact:** Generated outputs match the actual image content
+
+---
+
+### ED-038: Translation Verification Loop
+
+**Decision:** Re-read generated images with GPT-4o Vision to verify translations rendered correctly
+
+**Date:** 2025-12-22
+
+**Problem:**
+Even with good prompts, the AI may render text incorrectly:
+
+- Wrong characters
+- Truncated text
+- Missing words
+- RTL rendering issues
+
+**Solution:**
+After generation, run a verification loop:
+
+```typescript
+interface VerificationResult {
+  expected: TranslatedText[];
+  actual: string[];           // Re-read from generated image
+  accuracy: number;           // 0-100%
+  mismatches: Mismatch[];
+}
+
+async function verifyTranslation(
+  generatedImage: Buffer,
+  expectedTranslations: TranslatedText[]
+): Promise<VerificationResult> {
+  // 1. Send generated image to GPT-4o Vision
+  // 2. Extract rendered text
+  // 3. Compare to expected
+  // 4. Calculate accuracy
+}
+```
+
+**Display:**
+
+- "Translation Accuracy: 98%" alongside drift score
+- Flag mismatches for user review
+- Option to regenerate failed variants
+
+**Rationale:**
+
+- Proves the tool works, not just generates
+- Professional QA mindset (like drift detection)
+- Contest differentiator
+
+**Impact:** Users have confidence translations actually rendered
+
+---
+
+### ED-039: Auto-Mask Suggestion from Vision Analysis
+
+**Decision:** Use detected text regions to suggest mask areas automatically
+
+**Date:** 2025-12-22
+
+**Problem:**
+Users must manually draw masks around text, which is:
+
+- Time-consuming
+- Error-prone (miss text, include too much)
+- Requires trial and error
+
+**Solution:**
+Use Vision-detected bounding boxes to suggest masks:
+
+```typescript
+interface MaskSuggestion {
+  regions: Array<{
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    padding: number;      // Recommended padding (10% of size)
+    label: string;        // "YOU ARE", etc.
+  }>;
+  combinedMaskBuffer: Buffer;  // Pre-generated mask image
+}
+```
+
+**UI Flow:**
+
+1. Upload image
+2. Click "Analyze" → Vision detects text
+3. Display suggested mask regions as overlay
+4. User clicks "Accept" or adjusts manually
+5. Generate with optimized mask
+
+**Rationale:**
+
+- Reduces friction for users
+- Ensures all text is covered
+- Optimal padding reduces artifacts
+
+**Impact:** Faster workflow, better mask quality
+
+---
+
+### ED-040: Dual Mode Architecture (Demo vs Any Image)
+
+**Decision:** Support both "Demo Mode" (hardcoded) and "Any Image" mode (Vision-powered)
+
+**Date:** 2025-12-22
+
+**Problem:**
+We need both:
+
+- Guaranteed working demo for judges (current hardcoded approach)
+- Universal support for custom images (new Vision approach)
+
+**Solution:**
+Mode toggle in UI:
+
+```typescript
+type GenerationMode = "demo" | "vision";
+
+// Demo Mode: Uses LOCALIZED_COPY (guaranteed to work)
+// Vision Mode: Uses TextDetectionService + DynamicPromptBuilder
+```
+
+**Implementation:**
+
+- "Demo Mode" toggle visible on demo projects
+- "Vision Mode" default for custom uploads
+- Clear labeling so users understand the difference
+
+**Rationale:**
+
+- Judges can see polished demo output
+- Users can experiment with custom images
+- Both paths are tested and reliable
+- Backwards compatible
+
+**Trade-offs:**
+
+- Two code paths to maintain
+- Slightly more complex UX
+
+**Impact:** Best of both worlds - reliable demo + universal support
+
+---
+
 ## How to Add Decisions
 
 When making a decision not covered by the spec:

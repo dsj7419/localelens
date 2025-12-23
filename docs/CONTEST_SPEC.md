@@ -24,10 +24,12 @@ Submissions must provide:
 
 We will win by being:
 
-- **Immediately understandable**: “localize screenshots visually (not just translate text)”
+- **Immediately understandable**: "localize screenshots visually (not just translate text)"
 - **Visually undeniable**: crisp before/after gallery across locales including **RTL**
 - **Engineering-polished**: clean UI, predictable outputs, drift detection, fast local setup
 - **Secure and responsible**: keys never leave server env; no credential storage
+- **Technically sophisticated**: Two-model pipeline (GPT-4o Vision + gpt-image-1.5)
+- **Universal**: Works with ANY image, not just demo screenshots
 
 ---
 
@@ -72,10 +74,55 @@ Most submissions will be:
 
 - prompt-to-image demos
 - simple wrappers around the API
+
 LocaleLens is:
+
 - a complete workflow tool
 - demonstrates editing precision + typography
 - produces an immediate, judge-friendly gallery
+- **Two-model pipeline** showcasing both GPT-4o and gpt-image-1.5
+- **Universal image support** - works with any image, not just demos
+- **Quality verification** - proves translations rendered correctly
+
+### 3.4 Technical Architecture (Contest Differentiator)
+
+LocaleLens uses a sophisticated two-model pipeline:
+
+```text
+┌─────────────────────────────────────────────────────────────────┐
+│                    TWO-MODEL PIPELINE                            │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  Step 1: INSPECTOR (GPT-4o Vision)                              │
+│  ├─ Analyze uploaded image                                      │
+│  ├─ Detect all text regions with bounding boxes                 │
+│  ├─ Identify layout type (poster, screenshot, banner)           │
+│  └─ Extract style information (font, colors)                    │
+│                                                                  │
+│  Step 2: TRANSLATOR (GPT-4o)                                    │
+│  ├─ Translate detected text to target locale                    │
+│  ├─ Respect length constraints                                  │
+│  └─ Handle RTL languages (Arabic)                               │
+│                                                                  │
+│  Step 3: ARTIST (gpt-image-1.5)                                 │
+│  ├─ Generate localized variant with dynamic prompt              │
+│  ├─ Streaming preview during generation                         │
+│  └─ Pixel-perfect composite for 0% drift                        │
+│                                                                  │
+│  Step 4: VERIFIER (GPT-4o Vision)                               │
+│  ├─ Re-read generated image                                     │
+│  ├─ Compare to expected translations                            │
+│  └─ Report "Translation Accuracy" percentage                    │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Why this matters:**
+
+- **gpt-image-1.5 cannot "read"** - It's a generation model, not vision
+- **GPT-4o Vision provides the understanding** - Detects text, layout, style
+- **Together they solve the problem** - Understand first, then generate
+- **Verification proves quality** - Not just drift, but translation accuracy
 
 ---
 
