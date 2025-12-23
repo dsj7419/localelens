@@ -2003,6 +2003,40 @@ const response = await this.client.images.edit({
 
 ---
 
+### ED-059: Image Lightbox for Results Comparison
+
+**Decision:** Add click-to-zoom lightbox on the Results page for detailed image inspection.
+
+**Context:**
+The Results page displays original and variant images side-by-side at scaled-down sizes (45% of canvas dimensions) to fit both images in view. Users need to inspect images at full resolution to verify translation quality and visual preservation.
+
+**Implementation:**
+
+1. **ImageLightbox Component** (`src/components/project/ImageLightbox.tsx`):
+
+   - Uses shadcn/ui Dialog (Radix) for accessible modal
+   - Smooth fade-in animation with loading spinner
+   - Images display at max 90vw × 85vh while maintaining aspect ratio
+   - Escape key or click outside to close (handled by Radix)
+   - Screen reader accessible with DialogTitle (sr-only pattern)
+
+2. **Results Page Integration** (`src/components/project/steps/ResultsStep.tsx`):
+   - Both Original and Variant images are clickable
+   - Visual feedback: `cursor-zoom-in` and ring hover effect
+   - Tooltip: "Click to view full size"
+   - Lightbox title reflects what's shown (e.g., "Spanish (Mexico)" or "French (Canada) (Drift Overlay)")
+
+**Rationale:**
+
+- Contest judges need to inspect localization quality in detail
+- Side-by-side comparison at 45% scale isn't sufficient for evaluating text rendering
+- Full-size viewing reveals whether translations preserved visual fidelity
+- Modern UX pattern users expect from image-focused applications
+
+**Impact:** Better contest presentation + improved user experience for detailed quality inspection.
+
+---
+
 ## How to Add Decisions
 
 When making a decision not covered by the spec:

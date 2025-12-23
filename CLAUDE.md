@@ -142,7 +142,7 @@ IMAGE_MODEL_FALLBACK="gpt-image-1"
 - `src/server/domain/services/dynamicPromptBuilder.ts` - Layout-aware prompts (Sprint 8, now fallback)
 - `src/server/services/verificationService.ts` - GPT-4o Vision re-read verification (Sprint 9)
 - `src/server/services/maskSuggestionService.ts` - Auto-mask from detected regions (Sprint 9)
-- `docs/ENGINEERING_DECISIONS.md` - 58 documented engineering decisions with rationale
+- `docs/ENGINEERING_DECISIONS.md` - 59 documented engineering decisions with rationale
 - `docs/SPRINTS.md` - Sprint planning (Sprints 0-9 complete, Sprint 10 in progress)
 
 ## Vision Pipeline (Sprint 8 - COMPLETE)

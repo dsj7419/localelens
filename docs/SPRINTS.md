@@ -59,7 +59,7 @@ Current State: AI-POWERED PROMPT ENGINEERING PIPELINE
 - ✅ **PromptEngineeringService** — GPT-4o writes prompts for gpt-image-1.5 (Sprint 10 KEY INNOVATION)
 - ✅ **Cancel button UX improvement** — Shows "Cancelling..." with explanatory message
 - ✅ **API parameter optimization** — Added `moderation: "auto"` for content safety, `input_fidelity: "high"` for better preservation
-- 🔄 **Image zoom/lightbox** — Click to enlarge images in results view for better comparison
+- ✅ **Image zoom/lightbox** — Click to enlarge images in results view for better comparison (ED-059)
 - 🔄 README overhaul with universal image support
 - 🔄 Diverse image testing and documentation
 - 🔄 Demo video/GIF creation
