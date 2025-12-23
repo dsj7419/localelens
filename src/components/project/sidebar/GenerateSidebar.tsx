@@ -3,7 +3,7 @@
 import { Button } from "~/components/ui/button";
 import { Badge } from "~/components/ui/badge";
 import { Separator } from "~/components/ui/separator";
-import { Sparkles, PlayCircle, Check, Zap, Info, Eye, Loader2 } from "lucide-react";
+import { Sparkles, PlayCircle, Check, Zap, Info, Eye, Loader2, XCircle } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
@@ -42,6 +42,7 @@ interface GenerateSidebarProps {
   onClearAll: () => void;
   onGenerate: () => void;
   onDemoMode?: () => void;
+  onCancel?: () => void;
   onCurrentLocaleChange?: (locale: LocaleId | null) => void;
 }
 
@@ -68,6 +69,7 @@ export function GenerateSidebar({
   onClearAll,
   onGenerate,
   onDemoMode,
+  onCancel,
   onCurrentLocaleChange,
 }: GenerateSidebarProps) {
   const allSelected = selectedLocales.length === SUPPORTED_LOCALES.length;
@@ -312,7 +314,7 @@ export function GenerateSidebar({
 
       {/* Generate Buttons */}
       <div className="pt-4 border-t border-border space-y-2">
-        {onDemoMode && (
+        {onDemoMode && !isGenerating && (
           <Button
             variant="outline"
             className="w-full gap-2"
@@ -323,14 +325,25 @@ export function GenerateSidebar({
             Demo Mode
           </Button>
         )}
-        <Button
-          className="w-full gap-2"
-          onClick={onGenerate}
-          disabled={isGenerating || noneSelected}
-        >
-          <Sparkles className="h-4 w-4" />
-          {isGenerating ? "Generating..." : `Generate ${selectedLocales.length} Variant(s)`}
-        </Button>
+        {isGenerating ? (
+          <Button
+            variant="destructive"
+            className="w-full gap-2"
+            onClick={onCancel}
+          >
+            <XCircle className="h-4 w-4" />
+            Cancel Generation
+          </Button>
+        ) : (
+          <Button
+            className="w-full gap-2"
+            onClick={onGenerate}
+            disabled={noneSelected}
+          >
+            <Sparkles className="h-4 w-4" />
+            Generate {selectedLocales.length} Variant(s)
+          </Button>
+        )}
       </div>
     </div>
   );

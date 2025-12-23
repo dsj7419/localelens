@@ -112,7 +112,8 @@ export default function ProjectPage() {
   const [streamingEnabled, setStreamingEnabled] = useState(false);
 
   // Vision pipeline state
-  const [visionModeEnabled, setVisionModeEnabled] = useState(false);
+  // Default to ON since Vision mode is more accurate and works with any image
+  const [visionModeEnabled, setVisionModeEnabled] = useState(true);
   const [detectedTextCount, setDetectedTextCount] = useState(0);
   const [hasAnalysis, setHasAnalysis] = useState(false);
 
@@ -157,12 +158,18 @@ export default function ProjectPage() {
 
   // Verification mutation (Sprint 9)
   const verifyMutation = api.variant.verify.useMutation({
-    onSuccess: () => {
+    onSuccess: (data) => {
       void queries.refetchProject();
       setVerifyingLocale(null);
+      toast.success(
+        `Verification complete: ${data.accuracy.toFixed(1)}%`,
+        { description: `Status: ${data.status.toUpperCase()} (${data.matches.filter(m => m.status === "match").length}/${data.expectedCount} matched)` }
+      );
     },
-    onError: () => {
+    onError: (error) => {
       setVerifyingLocale(null);
+      console.error("[ProjectPage] Verification failed:", error.message);
+      toast.error("Verification failed", { description: error.message });
     },
   });
 
@@ -297,6 +304,17 @@ export default function ProjectPage() {
       prev.includes(locale) ? prev.filter((l) => l !== locale) : [...prev, locale]
     );
   }, []);
+
+  // Cancel handler for generation
+  const handleCancelGeneration = useCallback(() => {
+    console.log("[ProjectPage] Cancelling generation");
+    // Cancel streaming if active
+    streaming.cancel();
+    // Reset generation state
+    setGenerationProgress(0);
+    setCurrentGeneratingLocale(null);
+    toast.info("Generation cancelled");
+  }, [streaming]);
 
   const handleGenerate = useCallback(async () => {
     setIsDemoMode(false);
@@ -508,6 +526,7 @@ export default function ProjectPage() {
             onClearAll={() => setSelectedLocales([])}
             onGenerate={handleGenerate}
             onDemoMode={handleDemoMode}
+            onCancel={handleCancelGeneration}
             onCurrentLocaleChange={setCurrentGeneratingLocale}
           />
         );

@@ -592,30 +592,44 @@ export const variantRouter = createTRPCRouter({
       const translationService = getTranslationService();
       const verificationService = getVerificationService();
 
-      console.log(`[VariantRouter] Verifying translation for ${getLocaleMetadata(locale).name}`);
+      const localeName = getLocaleMetadata(locale).name;
+      console.log(`[VariantRouter] Verifying translation for ${localeName}`);
 
       // Get the variant
       const variant = await variantRepo.findByProjectAndLocale(projectId, locale);
       if (!variant) {
+        console.error(`[VariantRouter] Variant not found for ${localeName}`);
         throw new Error(`Variant not found for locale ${locale}`);
       }
+      console.log(`[VariantRouter] Found variant ${variant.id}`);
 
       // Get the generated image
       const variantBuffer = await fileStore.getVariantImage(locale);
       if (!variantBuffer) {
+        console.error(`[VariantRouter] Variant image not found for ${localeName}`);
         throw new Error("Variant image not found");
       }
+      console.log(`[VariantRouter] Loaded variant image (${variantBuffer.length} bytes)`);
 
       // Get image analysis to get expected translations
       const analysis = await imageAnalysisRepo.findByProjectId(projectId);
       if (!analysis) {
+        console.error(`[VariantRouter] No image analysis found for project`);
         throw new Error("No image analysis found - run Vision mode first");
       }
+      console.log(`[VariantRouter] Found image analysis (layout: ${analysis.layout})`);
 
       // Parse text regions from analysis
       const textRegions = JSON.parse(analysis.textRegions) as TextRegion[];
+      console.log(`[VariantRouter] Parsed ${textRegions.length} text regions`);
+
+      if (textRegions.length === 0) {
+        console.warn(`[VariantRouter] No text regions to verify - analysis has no detected text`);
+        throw new Error("No text regions found in analysis - cannot verify");
+      }
 
       // Get translations for this locale
+      console.log(`[VariantRouter] Getting translations for ${localeName}...`);
       const translationResult = await translationService.translateTexts({
         textRegions,
         targetLocale: locale,
@@ -626,10 +640,13 @@ export const variantRouter = createTRPCRouter({
       });
 
       if (!translationResult.success) {
+        console.error(`[VariantRouter] Translation failed: ${translationResult.error}`);
         throw new Error(`Translation failed: ${translationResult.error}`);
       }
+      console.log(`[VariantRouter] Got ${translationResult.translations.length} translations`);
 
-      // Verify the generated image
+      // Verify the generated image with GPT-4o Vision
+      console.log(`[VariantRouter] Starting GPT-4o Vision verification...`);
       const verificationResult = await verificationService.verifyTranslation({
         generatedImageBuffer: variantBuffer,
         expectedTranslations: translationResult.translations,
