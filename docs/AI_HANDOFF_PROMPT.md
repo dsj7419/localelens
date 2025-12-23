@@ -180,13 +180,16 @@ GOAL: Have GPT-4o generate preservation/localization instructions dynamically:
 This makes the system truly universal — works for ANY image type.
 
 ### 2) README Overhaul
+
 - Update with universal image support (not just demo screenshots)
 - Explain two-model pipeline (GPT-4o + gpt-image-1.5)
 - Updated screenshots showing diverse image support
 - Architecture diagram
 
 ### 3) Diverse Image Testing
+
 Test with multiple image types to prove universal support:
+
 - App store screenshots (original use case)
 - Motivational posters (sticky notes)
 - Marketing banners
@@ -197,7 +200,9 @@ Test with multiple image types to prove universal support:
 Document results in `docs/TESTING_RESULTS.md`
 
 ### 4) Demo Video/GIF
+
 Create compelling demo showing:
+
 - Upload custom image
 - Automatic text detection
 - Auto-mask suggestion
@@ -208,6 +213,7 @@ Create compelling demo showing:
 ## Step 4: Coding Standards (NON-NEGOTIABLE)
 
 ### SOLID Principles
+
 - **S**ingle Responsibility: Each file/class/function does ONE thing
 - **O**pen/Closed: Extend via interfaces, don't modify working code
 - **L**iskov Substitution: Implementations are interchangeable
@@ -215,6 +221,7 @@ Create compelling demo showing:
 - **D**ependency Inversion: Depend on abstractions, not concretions
 
 ### Architecture Rules
+
 - Domain layer (`src/server/domain/`) has NO external dependencies
 - Services implement interfaces defined in domain layer
 - tRPC routers are THIN - they delegate to services
@@ -222,6 +229,7 @@ Create compelling demo showing:
 - Components are presentational - hooks handle logic
 
 ### Code Quality
+
 - TypeScript strict mode must pass (`pnpm typecheck`)
 - No `any` types in production code
 - All new services must have interfaces
@@ -293,7 +301,8 @@ Please read the documentation files listed in Step 1 and confirm:
 3. You're ready to implement Sprint 10 (dynamic prompts, README, testing)
 
 Use ultrathink mode. Take your time. Quality over speed. We want to WIN this contest!
-```
+
+```text
 
 ---
 
