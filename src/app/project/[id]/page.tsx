@@ -9,6 +9,7 @@
 
 import { useState, useCallback, useEffect, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { api } from "~/trpc/react";
 
 import { ScrollArea } from "~/components/ui/scroll-area";
@@ -115,6 +116,12 @@ export default function ProjectPage() {
   const [detectedTextCount, setDetectedTextCount] = useState(0);
   const [hasAnalysis, setHasAnalysis] = useState(false);
 
+  // Track if we've checked for existing analysis on load
+  const [analysisChecked, setAnalysisChecked] = useState(false);
+
+  // Verification state (Sprint 9)
+  const [verifyingLocale, setVerifyingLocale] = useState<LocaleId | null>(null);
+
   // Calculate canvas dimensions based on base image aspect ratio
   const canvasDimensions = useMemo(
     () => calculateCanvasDimensions(queries.baseImageWidth, queries.baseImageHeight),
@@ -124,10 +131,18 @@ export default function ProjectPage() {
   // Streaming generation hook for gpt-image-1.5 progressive preview
   const streaming = useStreamingGeneration();
 
-  // Vision pipeline query (check if analysis exists)
+  // Vision pipeline query - ALWAYS check for existing analysis on load
+  // This runs independently of visionModeEnabled so we can show mask suggestions
+  // even when user hasn't enabled Vision Mode yet
+  const existingAnalysisQuery = api.project.getImageAnalysis.useQuery(
+    { projectId },
+    { enabled: !analysisChecked } // Only run once on load
+  );
+
+  // Vision pipeline query (used when Vision Mode is actively enabled)
   const imageAnalysisQuery = api.project.getImageAnalysis.useQuery(
     { projectId },
-    { enabled: visionModeEnabled }
+    { enabled: visionModeEnabled && analysisChecked }
   );
 
   // Vision pipeline mutations
@@ -140,7 +155,57 @@ export default function ProjectPage() {
     },
   });
 
-  // Update state when analysis is loaded from query
+  // Verification mutation (Sprint 9)
+  const verifyMutation = api.variant.verify.useMutation({
+    onSuccess: () => {
+      void queries.refetchProject();
+      setVerifyingLocale(null);
+    },
+    onError: () => {
+      setVerifyingLocale(null);
+    },
+  });
+
+  // Mask suggestion query (Sprint 9) - only enabled when we have an analysis
+  const maskSuggestionQuery = api.project.getSuggestedMask.useQuery(
+    { projectId },
+    { enabled: hasAnalysis }
+  );
+
+  // Mask suggestion mutation (Sprint 9)
+  const applySuggestedMaskMutation = api.project.applySuggestedMask.useMutation({
+    onSuccess: async (data) => {
+      // Refetch project to update hasMask state (enables Continue button)
+      await queries.refetchProject();
+      // Refetch and load the mask into the canvas
+      const result = await queries.refetchMask();
+      if (result.data?.maskBase64) {
+        maskEditor.loadMask(result.data.maskBase64);
+      }
+      // Inform user this is a starting point
+      toast.success(
+        `Auto-mask applied (${data.regionCount} regions)`,
+        { description: "This is a starting point — use the tools above to refine if needed." }
+      );
+    },
+  });
+
+  // Check for existing analysis on initial load (runs once)
+  useEffect(() => {
+    // Mark as checked once we have data OR an error (to prevent retrying)
+    if (!analysisChecked && (existingAnalysisQuery.data !== undefined || existingAnalysisQuery.isError)) {
+      setAnalysisChecked(true);
+      if (existingAnalysisQuery.data?.analysis) {
+        setDetectedTextCount(existingAnalysisQuery.data.analysis.textRegions.length);
+        setHasAnalysis(true);
+        console.log(`[ProjectPage] Found existing analysis with ${existingAnalysisQuery.data.analysis.textRegions.length} regions`);
+      } else {
+        console.log(`[ProjectPage] No existing analysis found for project`);
+      }
+    }
+  }, [existingAnalysisQuery.data, existingAnalysisQuery.isError, analysisChecked]);
+
+  // Update state when analysis is loaded from Vision Mode query
   useEffect(() => {
     if (imageAnalysisQuery.data?.analysis) {
       setDetectedTextCount(imageAnalysisQuery.data.analysis.textRegions.length);
@@ -152,16 +217,15 @@ export default function ProjectPage() {
   useEffect(() => {
     if (
       visionModeEnabled &&
+      analysisChecked && // Wait until we've checked for existing analysis
       !hasAnalysis &&
       !analyzeImageMutation.isPending &&
-      queries.hasBaseImage &&
-      !imageAnalysisQuery.isLoading &&
-      !imageAnalysisQuery.data?.analysis
+      queries.hasBaseImage
     ) {
       // No existing analysis, trigger one automatically
       analyzeImageMutation.mutate({ projectId });
     }
-  }, [visionModeEnabled, hasAnalysis, queries.hasBaseImage, imageAnalysisQuery.data, imageAnalysisQuery.isLoading, analyzeImageMutation, projectId]);
+  }, [visionModeEnabled, analysisChecked, hasAnalysis, queries.hasBaseImage, analyzeImageMutation, projectId]);
 
   // Vision pipeline generation mutation
   const generateWithVisionMutation = api.variant.generateAllWithVision.useMutation({
@@ -185,7 +249,13 @@ export default function ProjectPage() {
   const mutations = useProjectMutations({
     projectId,
     onProjectChange: () => void queries.refetchProject(),
-    onBaseImageChange: () => void queries.refetchBaseImage(),
+    onBaseImageChange: async () => {
+      await queries.refetchBaseImage();
+      // Auto-analyze the uploaded image for text detection
+      // This enables the "Use Suggested Mask" feature on the Mask step
+      console.log(`[ProjectPage] Base image uploaded, triggering auto-analysis`);
+      analyzeImageMutation.mutate({ projectId });
+    },
     onMaskChange: async () => {
       const result = await queries.refetchMask();
       if (result.data?.maskBase64) {
@@ -334,6 +404,17 @@ export default function ProjectPage() {
     [selectedLocale, variantImage.imageUrl]
   );
 
+  // Verification handler (Sprint 9)
+  const handleVerify = useCallback((locale: LocaleId) => {
+    setVerifyingLocale(locale);
+    verifyMutation.mutate({ projectId, locale });
+  }, [projectId, verifyMutation]);
+
+  // Apply suggested mask handler (Sprint 9)
+  const handleApplySuggestedMask = useCallback(() => {
+    applySuggestedMaskMutation.mutate({ projectId });
+  }, [projectId, applySuggestedMaskMutation]);
+
   const handleDownloadOriginal = useCallback(() => {
     if (!queries.baseImageUrl) return;
     const link = document.createElement("a");
@@ -371,6 +452,9 @@ export default function ProjectPage() {
             hasBaseImage={queries.hasBaseImage}
             isUploading={mutations.isUploading}
             isDemoLoading={mutations.isDemoLoading}
+            isAnalyzing={analyzeImageMutation.isPending}
+            hasAnalysis={hasAnalysis}
+            detectedTextCount={detectedTextCount}
             onFileSelect={mutations.handleFileUpload}
             onLoadDemo={() => mutations.loadDemoBaseImage.mutate({ projectId })}
             onContinue={workflow.goToMask}
@@ -387,6 +471,9 @@ export default function ProjectPage() {
             hasChanges={maskEditor.hasChanges}
             hasMask={queries.hasMask}
             isDemoProject={queries.isDemoProject}
+            hasSuggestion={!!maskSuggestionQuery.data?.suggestion}
+            isApplyingSuggestion={applySuggestedMaskMutation.isPending}
+            suggestionRegionCount={maskSuggestionQuery.data?.suggestion?.regionCount ?? null}
             onToolChange={maskEditor.setActiveTool}
             onBrushSizeChange={maskEditor.setBrushSize}
             onUndo={maskEditor.undo}
@@ -394,6 +481,7 @@ export default function ProjectPage() {
             onEditAll={maskEditor.editAll}
             onKeepAll={maskEditor.keepAll}
             onLoadDemo={handleLoadDemoMask}
+            onApplySuggestion={handleApplySuggestedMask}
             onSave={handleSaveMask}
             onDeleteMask={handleDeleteMask}
             onContinue={workflow.goToGenerate}
@@ -432,11 +520,13 @@ export default function ProjectPage() {
             showOverlay={results.showOverlay}
             isExporting={mutations.isExporting}
             isRegenerating={mutations.regenerateVariant.isPending ? "loading" : null}
+            isVerifying={verifyingLocale}
             onVariantSelect={results.selectVariant}
             onToggleOverlay={results.toggleOverlay}
             onDownloadVariant={handleDownloadVariant}
             onDownloadOriginal={handleDownloadOriginal}
             onRegenerate={(locale) => mutations.regenerateVariant.mutate({ projectId, locale })}
+            onVerify={handleVerify}
             onExportZip={() => mutations.exportZip.mutate({ projectId })}
             onExportMontage={() => mutations.generateMontage.mutate({ projectId })}
           />
@@ -449,7 +539,6 @@ export default function ProjectPage() {
       case "upload":
         return (
           <UploadStepCanvas
-            hasBaseImage={queries.hasBaseImage}
             baseImageUrl={queries.baseImageUrl}
             canvasWidth={canvasDimensions.width}
             canvasHeight={canvasDimensions.height}

@@ -11,6 +11,7 @@ import {
   RefreshCw,
   Eye,
   EyeOff,
+  CheckSquare,
 } from "lucide-react";
 import type { Variant } from "~/server/domain/entities/project";
 import {
@@ -18,6 +19,7 @@ import {
   type LocaleId,
 } from "~/server/domain/value-objects/locale";
 import type { DriftStatus } from "~/server/domain/value-objects/drift";
+import { VerificationBadge } from "../VerificationBadge";
 
 interface ResultsSidebarProps {
   variants: Variant[];
@@ -25,11 +27,13 @@ interface ResultsSidebarProps {
   showOverlay: boolean;
   isExporting: boolean;
   isRegenerating: string | null;
+  isVerifying: string | null;
   onVariantSelect: (locale: LocaleId | "original") => void;
   onToggleOverlay: () => void;
   onDownloadVariant: (locale: LocaleId) => void;
   onDownloadOriginal: () => void;
   onRegenerate: (locale: LocaleId) => void;
+  onVerify: (locale: LocaleId) => void;
   onExportZip: () => void;
   onExportMontage: () => void;
 }
@@ -61,11 +65,13 @@ export function ResultsSidebar({
   showOverlay,
   isExporting,
   isRegenerating,
+  isVerifying,
   onVariantSelect,
   onToggleOverlay,
   onDownloadVariant,
   onDownloadOriginal,
   onRegenerate,
+  onVerify,
   onExportZip,
   onExportMontage,
 }: ResultsSidebarProps) {
@@ -201,6 +207,39 @@ export function ResultsSidebar({
                 </div>
               </>
             )}
+
+            <Separator />
+
+            <h3 className="text-sm font-medium">Translation Accuracy</h3>
+
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">Accuracy</span>
+              <VerificationBadge
+                accuracy={activeVariantData.translationAccuracy}
+                status={activeVariantData.verificationStatus}
+              />
+            </div>
+
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full gap-2"
+              onClick={() => onVerify(activeVariantData.locale)}
+              disabled={isVerifying === activeVariantData.locale}
+            >
+              <CheckSquare
+                className={`h-4 w-4 ${
+                  isVerifying === activeVariantData.locale ? "animate-pulse" : ""
+                }`}
+              />
+              {isVerifying === activeVariantData.locale
+                ? "Verifying..."
+                : activeVariantData.verificationStatus
+                  ? "Re-Verify"
+                  : "Verify Translation"}
+            </Button>
+
+            <Separator />
 
             <Button
               variant="outline"

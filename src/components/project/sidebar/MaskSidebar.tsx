@@ -15,6 +15,7 @@ import {
   ArrowRight,
   Download,
   Trash2,
+  Wand2,
 } from "lucide-react";
 
 export type MaskTool =
@@ -32,6 +33,9 @@ interface MaskSidebarProps {
   canRedo: boolean;
   hasChanges: boolean;
   hasMask: boolean;
+  hasSuggestion: boolean; // Whether a mask suggestion is available (from Vision analysis)
+  isApplyingSuggestion: boolean; // Whether the suggestion is being applied
+  suggestionRegionCount: number | null; // Number of detected regions
   onToolChange: (tool: MaskTool) => void;
   onBrushSizeChange: (size: number) => void;
   onUndo: () => void;
@@ -39,6 +43,7 @@ interface MaskSidebarProps {
   onEditAll: () => void;
   onKeepAll: () => void;
   onLoadDemo?: () => void; // Optional - only shown for demo projects
+  onApplySuggestion?: () => void; // Apply auto-detected mask regions
   onSave: () => void;
   onDeleteMask?: () => void; // Optional - delete saved mask
   onContinue: () => void;
@@ -57,6 +62,9 @@ export function MaskSidebar({
   canRedo,
   hasChanges,
   hasMask,
+  hasSuggestion,
+  isApplyingSuggestion,
+  suggestionRegionCount,
   onToolChange,
   onBrushSizeChange,
   onUndo,
@@ -64,6 +72,7 @@ export function MaskSidebar({
   onEditAll,
   onKeepAll,
   onLoadDemo,
+  onApplySuggestion,
   onSave,
   onDeleteMask,
   onContinue,
@@ -194,6 +203,27 @@ export function MaskSidebar({
         </ToolGroup>
 
         <Separator />
+
+        {/* Auto-Mask from Vision (Sprint 9) */}
+        {hasSuggestion && onApplySuggestion && (
+          <>
+            <ToolGroup label="Auto-Detect">
+              <Button
+                variant="secondary"
+                size="sm"
+                className="w-full justify-start gap-2"
+                onClick={onApplySuggestion}
+                disabled={isApplyingSuggestion}
+              >
+                <Wand2 className={`h-4 w-4 ${isApplyingSuggestion ? "animate-pulse" : ""}`} />
+                {isApplyingSuggestion
+                  ? "Applying..."
+                  : `Use Suggested Mask${suggestionRegionCount ? ` (${suggestionRegionCount} regions)` : ""}`}
+              </Button>
+            </ToolGroup>
+            <Separator />
+          </>
+        )}
 
         {/* Actions */}
         <div className="space-y-2">

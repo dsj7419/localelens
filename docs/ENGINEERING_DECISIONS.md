@@ -1390,11 +1390,11 @@ GPT-4o describes what IT sees, not what we expect. Truly universal.
 
 ---
 
-### ED-046: Line-Count Preservation in Translations (PLANNED - Sprint 9)
+### ED-046: Line-Count Preservation in Translations (IMPLEMENTED - Sprint 9)
 
 **Decision:** Enforce that N source text regions produce exactly N translations
 
-**Date:** 2025-12-22 (discovered during Sprint 8 testing)
+**Date:** 2025-12-22 (implemented)
 
 **Problem:**
 Spanish translation of "YOU ARE / STRONGER / THAN YOU / THINK" became:
@@ -1403,19 +1403,18 @@ Spanish translation of "YOU ARE / STRONGER / THAN YOU / THINK" became:
 
 GPT-4o combined "THAN YOU THINK" into one natural Spanish phrase, leaving the 4th sticky note empty.
 
-**Solution (Sprint 9):**
-Add constraint to TranslationService prompt:
+**Solution Implemented:**
+Added constraint to TranslationService prompt (both system and user prompts):
 
 ```text
-"CRITICAL: The source has {N} separate text regions.
-Your translation MUST produce EXACTLY {N} separate translations.
-Do NOT combine lines. Each region must have its own translation.
-If the natural translation would combine phrases, split them creatively."
+"CRITICAL LINE-COUNT PRESERVATION:
+- You MUST produce EXACTLY the same number of translations as source texts
+- NEVER combine multiple source texts into a single translation
+- Each source text region MUST have its own separate translation
+- If a natural translation would combine phrases, split them creatively to maintain count"
 ```
 
-For Spanish, this might produce:
-
-- "ERES MÁS" / "FUERTE" / "DE LO QUE" / "CREES"
+Also added validation with warning logging when count mismatch occurs.
 
 **Trade-offs:**
 
@@ -1424,6 +1423,411 @@ For Spanish, this might produce:
 - Trade-off: visual consistency vs linguistic naturalness
 
 **Impact:** Translations always match source structure. No empty regions.
+
+---
+
+### ED-047: VerificationService with Levenshtein Distance Matching
+
+**Decision:** Use GPT-4o Vision re-read with Levenshtein distance for fuzzy text matching
+
+**Date:** 2025-12-22 (Sprint 9)
+
+**Problem:**
+After generation, we have no way to verify if translations actually rendered correctly. The AI may:
+
+- Render wrong characters
+- Truncate text
+- Miss words entirely
+- Have RTL rendering issues
+
+**Solution:**
+Created `VerificationService` (`src/server/services/verificationService.ts`) that:
+
+1. Takes generated image buffer and expected translations
+2. Sends image to GPT-4o Vision for text extraction
+3. Uses Levenshtein distance for fuzzy string matching
+4. Calculates similarity percentage for each text region
+5. Determines overall verification status
+
+**Matching Thresholds:**
+
+- `match` (>95% similarity)
+- `partial` (70-95% similarity)
+- `mismatch` (<70% similarity)
+- `missing` (no corresponding actual text found)
+
+**Overall Status:**
+
+- `pass` (>85% average accuracy)
+- `warn` (60-85% average accuracy)
+- `fail` (<60% average accuracy)
+
+**Key Design Decisions:**
+
+- Factory pattern with `getVerificationService()` singleton
+- Interface segregation with `IVerificationService`
+- Graceful degradation (returns failed result on error)
+- Position-based matching with fallback to best-match
+
+**Impact:** Users can verify translations actually rendered correctly. Professional QA capability.
+
+---
+
+### ED-048: MaskSuggestionService with Region Merging
+
+**Decision:** Auto-generate clean rectangular masks from detected text regions with intelligent region merging
+
+**Date:** 2025-12-22 (Sprint 9)
+
+**Problem:**
+Hand-drawn masks have several issues:
+
+- Organic brush strokes create "smudge" artifacts in generated images
+- Imprecise coverage (may miss text or include too much)
+- Time-consuming manual process
+- Inconsistent results
+
+**Solution:**
+Created `MaskSuggestionService` (`src/server/services/maskSuggestionService.ts`) that:
+
+1. Converts normalized bounding boxes (0-1) to pixel coordinates
+2. Adds intelligent padding (10% of region size, min 5px, max 50px)
+3. Clamps regions to image bounds
+4. Merges overlapping regions (within 10px tolerance)
+5. Generates PNG with alpha channel using Sharp
+
+**Mask Format:**
+
+- Transparent (alpha=0) = regions to EDIT
+- Opaque (alpha=255) = regions to PRESERVE
+
+**SVG-to-PNG Pipeline:**
+
+```typescript
+// Generate SVG with rectangles for edit regions
+const svg = `<svg>
+  <rect fill="white" /> <!-- preserve -->
+  ${regions.map(r => `<rect fill="black" />`)} <!-- edit -->
+</svg>`;
+// Convert black → transparent, white → opaque
+```
+
+**Impact:** Clean rectangular masks eliminate artifacts. Faster workflow. Better quality output.
+
+---
+
+### ED-049: Variant Verification Fields in Database
+
+**Decision:** Store verification results directly on Variant model
+
+**Date:** 2025-12-22 (Sprint 9)
+
+**Problem:**
+Need to persist verification results for:
+
+- Display in UI
+- Historical tracking
+- Re-verification without re-running
+
+**Solution:**
+Added fields to Prisma Variant model:
+
+```prisma
+model Variant {
+  // Existing fields...
+
+  translationAccuracy  Float?   // 0-100 percentage
+  verificationStatus   String?  // "pass" | "warn" | "fail"
+  verificationDetails  String?  // JSON string of full VerificationResult
+}
+```
+
+**Design Rationale:**
+
+- Keep Variant as the single source of truth
+- Store accuracy as Float for easy sorting/filtering
+- Store status as String for simple display
+- Store details as JSON for full match information
+
+**API Endpoint:**
+`variant.verify` mutation that:
+
+1. Gets expected translations via TranslationService
+2. Runs verification via VerificationService
+3. Updates Variant with results
+4. Returns summary for UI
+
+**Impact:** Verification results persist across sessions. Complete audit trail.
+
+---
+
+### ED-050: On-Demand Verification (Not Auto-Verify)
+
+**Decision:** Verification is triggered manually, not automatically after generation
+
+**Date:** 2025-12-22 (Sprint 9)
+
+**Problem:**
+Auto-verification would:
+
+- Double API costs (extra GPT-4o Vision call per variant)
+- Increase latency significantly
+- May not be needed for all use cases
+
+**Solution:**
+Verification is a separate action:
+
+- "Verify Translation" button in ResultsSidebar
+- Shows accuracy badge (not verified → click to verify)
+- Re-verify option after first verification
+
+**UI States:**
+
+- Not verified: `<HelpCircle /> Not Verified`
+- Verifying: `<Spinner /> Verifying...`
+- Verified: `<CheckCircle/AlertCircle/XCircle /> XX%`
+
+**Trade-offs:**
+
+- Users must click to verify (extra step)
+- But: Users control costs and latency
+- Can verify only specific locales of concern
+
+**Impact:** User controls verification costs. Clean separation of generation and QA.
+
+---
+
+### ED-051: Semantic Position Detection for Text Regions
+
+**Decision:** Use semantic position descriptions ("left", "center", "right", "top", "middle", "bottom") instead of precise coordinates for bounding box placement
+
+**Date:** 2025-12-22 (Sprint 9 refinement)
+
+**Problem:**
+GPT-4o Vision is fundamentally not designed for precise spatial localization:
+
+1. Initial approach: Ask for exact bounding boxes (x, y, width, height in 0-1 normalized coordinates)
+   - Result: Wildly inaccurate coordinates (30-50% off actual positions)
+
+2. Grid-based approach: Divide image into 8×8 grid, ask for cell positions (A-H columns, 1-8 rows)
+   - Result: Still inaccurate (GPT-4o reported center-right grid cells for left-positioned text)
+
+3. Multiple validation attempts: Added validation, capping, bounding box constraints
+   - Result: Marginal improvements, still unusable for auto-mask
+
+**Solution:**
+Switched to semantic position descriptions:
+
+```typescript
+// GPT-4o now responds with:
+{
+  text: "YOU ARE",
+  horizontalPosition: "left",   // far-left, left, center, right, far-right
+  verticalPosition: "upper",    // top, upper, middle, lower, bottom
+  estimatedWidth: "short"       // tiny, short, medium, long, very-long
+}
+
+// We map semantics to coordinates:
+const HORIZONTAL_POSITIONS = {
+  "far-left": { center: 0.10, defaultWidth: 0.20 },
+  "left": { center: 0.30, defaultWidth: 0.25 },
+  "center": { center: 0.50, defaultWidth: 0.30 },
+  // ...
+};
+```
+
+**Rationale:**
+
+- Semantic descriptions are what GPT-4o is actually good at
+- Humans naturally describe positions this way
+- Maps well to rough rectangular regions with padding
+- Acceptable accuracy for "starting point" auto-mask
+
+**Trade-offs:**
+
+- Still not pixel-perfect (but that's expected)
+- Requires users to refine masks manually
+- Positioned as "starting point" not "final mask"
+
+**Impact:** Auto-mask now provides useful starting point. Users refine as needed.
+
+---
+
+### ED-052: Auto-Analyze on Image Upload
+
+**Decision:** Automatically trigger Vision analysis when a base image is uploaded
+
+**Date:** 2025-12-22 (Sprint 9)
+
+**Problem:**
+Original flow required users to:
+
+1. Upload image
+2. Go to Generate step
+3. Enable Vision Mode
+4. Wait for analysis
+5. Go back to Mask step to see suggested mask
+
+This was confusing and inefficient.
+
+**Solution:**
+Trigger analysis automatically in `onBaseImageChange` callback:
+
+```typescript
+onBaseImageChange: async () => {
+  await queries.refetchBaseImage();
+  console.log(`[ProjectPage] Base image uploaded, triggering auto-analysis`);
+  analyzeImageMutation.mutate({ projectId });
+},
+```
+
+Also check for existing analysis on page load:
+
+```typescript
+const existingAnalysisQuery = api.project.getImageAnalysis.useQuery(
+  { projectId },
+  { enabled: !analysisChecked }
+);
+```
+
+**UI Updates:**
+
+- UploadSidebar shows analysis status: "Analyzing text regions..." → "X text regions detected"
+- Continue button disabled while analyzing
+- Analysis runs in background, doesn't block UX
+
+**Rationale:**
+
+- Immediate value: Users see suggested mask on Mask step
+- Analysis reused later for Vision Mode generation
+- Minimal added latency (runs in background)
+
+**Impact:** "Use Suggested Mask" button appears immediately when entering Mask step.
+
+---
+
+### ED-053: Auto-Mask as "Starting Point" UX Pattern
+
+**Decision:** Position auto-mask as a "starting point" with explicit user messaging
+
+**Date:** 2025-12-22 (Sprint 9)
+
+**Problem:**
+GPT-4o Vision cannot provide pixel-perfect bounding boxes. Users might expect perfect auto-mask and be disappointed.
+
+**Solution:**
+Explicit toast message when auto-mask is applied:
+
+```typescript
+toast.success(
+  `Auto-mask applied (${data.regionCount} regions)`,
+  { description: "This is a starting point — use the tools above to refine if needed." }
+);
+```
+
+**Design Philosophy:**
+
+- Set correct expectations upfront
+- Emphasize that tools are available for refinement
+- Frame as time-saver, not replacement for manual masking
+- Graceful degradation: even imperfect mask is faster than starting from scratch
+
+**Rationale:**
+
+- Honest about limitations
+- Users appreciate transparency
+- Reduces frustration from unmet expectations
+- Positions the tool correctly
+
+**Impact:** Users understand to refine masks. Better overall experience.
+
+---
+
+### ED-054: Disable Region Merging for Separate Text Elements
+
+**Decision:** Disabled automatic region merging in MaskSuggestionService
+
+**Date:** 2025-12-22 (Sprint 9)
+
+**Problem:**
+Original MaskSuggestionService merged "nearby" regions (within 10px tolerance):
+
+```typescript
+// Was merging regions that were 10px apart
+const tolerance = 10;
+```
+
+This caused separate text elements (like text on different sticky notes) to be merged into one large mask, covering areas that shouldn't be edited.
+
+**Solution:**
+Disabled region merging entirely:
+
+```typescript
+// DISABLED: Merging was combining separate text elements (like sticky notes)
+// Each text region should remain separate for accurate masking
+const mergedRegions = regions; // Keep all regions separate
+```
+
+**Rationale:**
+
+- Separate text elements should have separate masks
+- Better to have more small masks than one large incorrect mask
+- Users can manually combine if needed
+
+**Trade-offs:**
+
+- More mask regions to display
+- Overlapping text (like multi-line labels) won't be merged
+
+**Impact:** Each detected text region gets its own mask rectangle.
+
+---
+
+### ED-055: Continue Button State Management with Project Refetch
+
+**Decision:** Refetch project data before updating local state when applying suggested mask
+
+**Date:** 2025-12-22 (Sprint 9)
+
+**Problem:**
+After applying suggested mask, "Continue to Generate" button stayed disabled because:
+
+1. `applySuggestedMaskMutation.onSuccess` loaded mask into canvas
+2. But `queries.hasMask` (from `useProjectQueries`) still returned false
+3. Button disabled condition: `disabled={!hasMask}`
+
+**Solution:**
+Call `queries.refetchProject()` FIRST in onSuccess:
+
+```typescript
+const applySuggestedMaskMutation = api.project.applySuggestedMask.useMutation({
+  onSuccess: async (data) => {
+    // 1. Refetch project to update hasMask state (enables Continue button)
+    await queries.refetchProject();
+    // 2. THEN refetch and load the mask into the canvas
+    const result = await queries.refetchMask();
+    if (result.data?.maskBase64) {
+      maskEditor.loadMask(result.data.maskBase64);
+    }
+    // 3. Show toast
+    toast.success(...);
+  },
+});
+```
+
+**Order matters:**
+
+1. `refetchProject()` — Updates `hasMask` flag in query cache
+2. `refetchMask()` — Gets mask data for canvas
+3. Toast — Shows success message
+
+**Rationale:**
+
+- React Query cache is source of truth for `hasMask`
+- Must update cache before UI re-renders
+- Sequential operations ensure correct state
+
+**Impact:** Continue button enables immediately after applying suggested mask.
 
 ---
 

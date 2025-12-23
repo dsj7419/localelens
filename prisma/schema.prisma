@@ -73,6 +73,11 @@ model Variant {
     modelUsed       String?     // The model that generated this variant
     createdAt       DateTime    @default(now())
 
+    // Verification fields (Sprint 9)
+    translationAccuracy  Float?   // Percentage of translations that rendered correctly (0-100)
+    verificationStatus   String?  // "pass" | "warn" | "fail"
+    verificationDetails  String?  // JSON string of VerificationResult with match details
+
     // Relations
     project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 

@@ -111,7 +111,13 @@ Your translations will be used to replace text in images, so you must:
 6. For bullet points: Maintain brevity and clarity
 
 CRITICAL: Translations must FIT in the same visual space as the original text.
-If a translation would be too long, use a shorter alternative that preserves meaning.`;
+If a translation would be too long, use a shorter alternative that preserves meaning.
+
+CRITICAL LINE-COUNT PRESERVATION:
+- You MUST produce EXACTLY the same number of translations as source texts
+- NEVER combine multiple source texts into a single translation
+- Each source text region MUST have its own separate translation
+- If a natural translation would combine phrases, split them creatively to maintain count`;
 
 /**
  * Build the translation prompt for a specific locale
@@ -141,9 +147,21 @@ function buildTranslationPrompt(
     ? `\n\nIMPORTANT: The target language (${localeName}) is RTL (right-to-left). Ensure proper RTL text formatting.`
     : "";
 
-  return `Translate the following texts to ${localeName} (${locale}).${contextInfo}${rtlNote}
+  const lineCountConstraint = `
 
-Input texts to translate:
+CRITICAL REQUIREMENT - LINE COUNT:
+The source has EXACTLY ${texts.length} text regions.
+Your translation MUST produce EXACTLY ${texts.length} translations.
+Do NOT combine or merge any lines. Each source text MUST map to exactly one translation.
+
+Example of WRONG behavior:
+  Source: ["THAN YOU", "THINK"]
+  Wrong: ["DE LO QUE CREES"] (INVALID - combined 2 into 1)
+  Correct: ["DE LO QUE", "PIENSAS"] (Valid - maintained 2 translations)`;
+
+  return `Translate the following texts to ${localeName} (${locale}).${contextInfo}${rtlNote}${lineCountConstraint}
+
+Input texts to translate (EXACTLY ${texts.length} items - you MUST return EXACTLY ${texts.length} translations):
 ${textItems.map((item) => `${item.index}. [${item.role}] "${item.text}" (${item.characterCount} chars)`).join("\n")}
 
 Return a JSON object with this EXACT structure:
@@ -161,6 +179,7 @@ Return a JSON object with this EXACT structure:
 }
 
 RULES:
+- You MUST return EXACTLY ${texts.length} translations - no more, no less
 - Keep translations as close to original length as possible
 - If translation is >20% longer, find a shorter alternative
 - Set "fitsOriginalBox" to false if translation is significantly longer
@@ -241,6 +260,15 @@ export class TranslationService implements ITranslationService {
 
       // Parse the JSON response
       const parsed = JSON.parse(content) as RawTranslationResponse;
+
+      // Validate line count matches
+      const expectedCount = textRegions.length;
+      const actualCount = parsed.translations?.length ?? 0;
+      if (actualCount !== expectedCount) {
+        console.warn(
+          `[TranslationService] Line count mismatch: expected ${expectedCount}, got ${actualCount}. Proceeding with available translations.`
+        );
+      }
 
       // Transform to our output format
       const translations = this.transformResponse(parsed, textRegions, targetLocale);

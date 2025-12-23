@@ -19,8 +19,9 @@ import { getLocalePlanService } from "~/server/domain/services/localePlan.servic
 import { getVariantGenerationService } from "~/server/domain/services/variantGeneration.service";
 import { getDemoModeService } from "~/server/services/demoModeService";
 import { getTextDetectionService, type ImageAnalysis, type TextRegion } from "~/server/services/textDetectionService";
-import { getTranslationService } from "~/server/services/translationService";
+import { getTranslationService, type TranslatedText } from "~/server/services/translationService";
 import { getDynamicPromptBuilder } from "~/server/domain/services/dynamicPromptBuilder";
+import { getVerificationService } from "~/server/services/verificationService";
 import {
   SUPPORTED_LOCALES,
   type LocaleId,
@@ -58,6 +59,11 @@ const generateAllWithVisionSchema = z.object({
   pixelPerfect: z.boolean().default(true),
   /** Use ultra-strict preservation mode */
   ultraStrict: z.boolean().default(false),
+});
+
+const verifyVariantSchema = z.object({
+  projectId: z.string().cuid(),
+  locale: z.enum(SUPPORTED_LOCALES),
 });
 
 export const variantRouter = createTRPCRouter({
@@ -559,6 +565,96 @@ export const variantRouter = createTRPCRouter({
           layout: analysis.layout,
           textRegionCount: analysis.textRegions.length,
         },
+      };
+    }),
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Verification (Sprint 9 - Translation Accuracy)
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Verify translation accuracy for a generated variant
+   *
+   * Uses GPT-4o Vision to extract text from the generated image and
+   * compare to expected translations. Returns accuracy percentage.
+   *
+   * This is a separate endpoint to give users control over verification costs.
+   */
+  verify: publicProcedure
+    .input(verifyVariantSchema)
+    .mutation(async ({ ctx, input }) => {
+      const { projectId, locale } = input;
+
+      // Load dependencies
+      const variantRepo = new PrismaVariantRepository(ctx.db);
+      const imageAnalysisRepo = new PrismaImageAnalysisRepository(ctx.db);
+      const fileStore = createFileStore(projectId);
+      const translationService = getTranslationService();
+      const verificationService = getVerificationService();
+
+      console.log(`[VariantRouter] Verifying translation for ${getLocaleMetadata(locale).name}`);
+
+      // Get the variant
+      const variant = await variantRepo.findByProjectAndLocale(projectId, locale);
+      if (!variant) {
+        throw new Error(`Variant not found for locale ${locale}`);
+      }
+
+      // Get the generated image
+      const variantBuffer = await fileStore.getVariantImage(locale);
+      if (!variantBuffer) {
+        throw new Error("Variant image not found");
+      }
+
+      // Get image analysis to get expected translations
+      const analysis = await imageAnalysisRepo.findByProjectId(projectId);
+      if (!analysis) {
+        throw new Error("No image analysis found - run Vision mode first");
+      }
+
+      // Parse text regions from analysis
+      const textRegions = JSON.parse(analysis.textRegions) as TextRegion[];
+
+      // Get translations for this locale
+      const translationResult = await translationService.translateTexts({
+        textRegions,
+        targetLocale: locale,
+        context: {
+          imageType: analysis.layout,
+          tone: "neutral",
+        },
+      });
+
+      if (!translationResult.success) {
+        throw new Error(`Translation failed: ${translationResult.error}`);
+      }
+
+      // Verify the generated image
+      const verificationResult = await verificationService.verifyTranslation({
+        generatedImageBuffer: variantBuffer,
+        expectedTranslations: translationResult.translations,
+        locale,
+      });
+
+      console.log(
+        `[VariantRouter] Verification complete: ${verificationResult.accuracy.toFixed(1)}% (${verificationResult.overallStatus})`
+      );
+
+      // Update variant with verification data
+      await variantRepo.updateVerification(
+        variant.id,
+        verificationResult.accuracy,
+        verificationResult.overallStatus,
+        JSON.stringify(verificationResult)
+      );
+
+      return {
+        locale,
+        accuracy: verificationResult.accuracy,
+        status: verificationResult.overallStatus,
+        matches: verificationResult.matches,
+        expectedCount: verificationResult.expectedTexts.length,
+        actualCount: verificationResult.actualTexts.length,
       };
     }),
 

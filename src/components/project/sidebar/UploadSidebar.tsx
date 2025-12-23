@@ -3,12 +3,15 @@
 import { useRef } from "react";
 import { Button } from "~/components/ui/button";
 import { Separator } from "~/components/ui/separator";
-import { Upload, Sparkles, FileImage, ArrowRight } from "lucide-react";
+import { Upload, Sparkles, FileImage, ArrowRight, ScanSearch, CheckCircle2 } from "lucide-react";
 
 interface UploadSidebarProps {
   hasBaseImage: boolean;
   isUploading: boolean;
   isDemoLoading: boolean;
+  isAnalyzing?: boolean;
+  hasAnalysis?: boolean;
+  detectedTextCount?: number;
   onFileSelect: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onLoadDemo: () => void;
   onContinue: () => void;
@@ -24,6 +27,9 @@ export function UploadSidebar({
   hasBaseImage,
   isUploading,
   isDemoLoading,
+  isAnalyzing,
+  hasAnalysis,
+  detectedTextCount,
   onFileSelect,
   onLoadDemo,
   onContinue,
@@ -79,15 +85,33 @@ export function UploadSidebar({
           </Button>
         </div>
 
-        {/* File Info */}
+        {/* File Info & Analysis Status */}
         {hasBaseImage && (
           <>
             <Separator />
-            <div className="space-y-2">
+            <div className="space-y-3">
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <FileImage className="h-4 w-4" />
                 <span>Image loaded</span>
               </div>
+
+              {/* Analysis Status */}
+              {isAnalyzing && (
+                <div className="flex items-center gap-2 text-sm text-purple-400">
+                  <ScanSearch className="h-4 w-4 animate-pulse" />
+                  <span>Analyzing text regions...</span>
+                </div>
+              )}
+              {hasAnalysis && !isAnalyzing && (
+                <div className="flex items-center gap-2 text-sm text-green-400">
+                  <CheckCircle2 className="h-4 w-4" />
+                  <span>
+                    {detectedTextCount !== undefined && detectedTextCount > 0
+                      ? `${detectedTextCount} text regions detected`
+                      : "Analysis complete"}
+                  </span>
+                </div>
+              )}
             </div>
           </>
         )}
@@ -98,14 +122,28 @@ export function UploadSidebar({
         <Button
           className="w-full gap-2"
           onClick={onContinue}
-          disabled={!hasBaseImage}
+          disabled={!hasBaseImage || isAnalyzing}
         >
-          Continue to Mask
-          <ArrowRight className="h-4 w-4" />
+          {isAnalyzing ? (
+            <>
+              <ScanSearch className="h-4 w-4 animate-pulse" />
+              Analyzing...
+            </>
+          ) : (
+            <>
+              Continue to Mask
+              <ArrowRight className="h-4 w-4" />
+            </>
+          )}
         </Button>
         {!hasBaseImage && (
           <p className="text-xs text-muted-foreground text-center">
             Upload an image to continue
+          </p>
+        )}
+        {hasBaseImage && isAnalyzing && (
+          <p className="text-xs text-muted-foreground text-center">
+            Detecting text regions for auto-mask...
           </p>
         )}
       </div>

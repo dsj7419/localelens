@@ -25,6 +25,11 @@ interface MaskStepSidebarProps {
   // Demo mode
   isDemoProject: boolean;
 
+  // Mask suggestion (Sprint 9)
+  hasSuggestion: boolean;
+  isApplyingSuggestion: boolean;
+  suggestionRegionCount: number | null;
+
   // Tool handlers
   onToolChange: (tool: MaskTool) => void;
   onBrushSizeChange: (size: number) => void;
@@ -37,6 +42,7 @@ interface MaskStepSidebarProps {
 
   // Actions
   onLoadDemo?: () => void;
+  onApplySuggestion?: () => void;
   onSave: () => void;
   onDeleteMask: () => void;
   onContinue: () => void;
@@ -61,6 +67,9 @@ export function MaskStepSidebar({
   hasChanges,
   hasMask,
   isDemoProject,
+  hasSuggestion,
+  isApplyingSuggestion,
+  suggestionRegionCount,
   onToolChange,
   onBrushSizeChange,
   onUndo,
@@ -68,6 +77,7 @@ export function MaskStepSidebar({
   onEditAll,
   onKeepAll,
   onLoadDemo,
+  onApplySuggestion,
   onSave,
   onDeleteMask,
   onContinue,
@@ -80,6 +90,9 @@ export function MaskStepSidebar({
       canRedo={canRedo}
       hasChanges={hasChanges}
       hasMask={hasMask}
+      hasSuggestion={hasSuggestion}
+      isApplyingSuggestion={isApplyingSuggestion}
+      suggestionRegionCount={suggestionRegionCount}
       onToolChange={onToolChange}
       onBrushSizeChange={onBrushSizeChange}
       onUndo={onUndo}
@@ -87,6 +100,7 @@ export function MaskStepSidebar({
       onEditAll={onEditAll}
       onKeepAll={onKeepAll}
       onLoadDemo={isDemoProject ? onLoadDemo : undefined}
+      onApplySuggestion={hasSuggestion ? onApplySuggestion : undefined}
       onSave={onSave}
       onDeleteMask={onDeleteMask}
       onContinue={onContinue}

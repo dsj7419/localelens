@@ -74,22 +74,23 @@ src/
 
 4. **SSE Streaming**: `/api/variant/stream` endpoint provides progressive image previews during generation. Events: `start`, `partial`, `processing`, `complete`, `error`.
 
-5. **Two-Model Pipeline** (NEW - Sprint 8+):
+5. **Two-Model Pipeline** (Sprint 8+):
 
    ```text
    GPT-4o Vision (Inspector) → GPT-4o (Translator) → gpt-image-1.5 (Artist) → GPT-4o Vision (Verifier)
    ```
 
    - **TextDetectionService**: Extracts text regions from any image using GPT-4o Vision
-   - **TranslationService**: Translates detected text to target locales
+   - **TranslationService**: Translates detected text to target locales (with line-count preservation)
    - **DynamicPromptBuilder**: Builds image-specific prompts (not hardcoded)
-   - **VerificationService**: Re-reads generated images to verify translation accuracy
+   - **VerificationService**: Re-reads generated images to verify translation accuracy (Sprint 9)
+   - **MaskSuggestionService**: Auto-generates clean rectangular masks from detected regions (Sprint 9)
 
 ### Database Schema (Prisma)
 
 - **Project**: id, name, baseImagePath, timestamps
 - **Mask**: id, projectId (unique), maskImagePath
-- **Variant**: id, projectId, locale, prompt, outputImagePath, driftScore, driftStatus, modelUsed
+- **Variant**: id, projectId, locale, prompt, outputImagePath, driftScore, driftStatus, modelUsed, translationAccuracy, verificationStatus, verificationDetails
 
 ## Key Implementation Details
 
@@ -135,8 +136,10 @@ IMAGE_MODEL_FALLBACK="gpt-image-1"
 - `src/server/services/textDetectionService.ts` - GPT-4o Vision text extraction (Sprint 8)
 - `src/server/services/translationService.ts` - Dynamic text translation (Sprint 8)
 - `src/server/domain/services/dynamicPromptBuilder.ts` - Layout-aware prompts (Sprint 8)
-- `docs/ENGINEERING_DECISIONS.md` - 40+ documented engineering decisions with rationale
-- `docs/SPRINTS.md` - Sprint planning (Sprints 0-8 complete, 9-10 planned)
+- `src/server/services/verificationService.ts` - GPT-4o Vision re-read verification (Sprint 9)
+- `src/server/services/maskSuggestionService.ts` - Auto-mask from detected regions (Sprint 9)
+- `docs/ENGINEERING_DECISIONS.md` - 55 documented engineering decisions with rationale
+- `docs/SPRINTS.md` - Sprint planning (Sprints 0-9 complete, Sprint 10 planned)
 
 ## Vision Pipeline (Sprint 8 - COMPLETE)
 
@@ -168,11 +171,39 @@ GPT-4o Vision (Inspector) → GPT-4o (Translator) → gpt-image-1.5 (Artist)
 - Detection count display ("X regions found")
 - Dynamic canvas dimensions for any image aspect ratio
 
+## Verification & Auto-Mask (Sprint 9 - COMPLETE)
+
+**Problem Solved:** Quality assurance and workflow automation.
+
+**New Services (Sprint 9):**
+
+- `VerificationService` - Re-reads generated images with GPT-4o Vision, computes translation accuracy using Levenshtein distance
+- `MaskSuggestionService` - Auto-generates clean rectangular masks from detected text regions with intelligent padding
+
+**New API Endpoints:**
+
+- `variant.verify` - Verify translation accuracy for a generated variant
+- `project.getSuggestedMask` - Get auto-generated mask from detected regions
+- `project.applySuggestedMask` - Apply suggested mask to project
+
+**UI Features:**
+
+- "Use Suggested Mask" button in Mask step (when analysis available)
+- "Verify Translation" button in Results step
+- VerificationBadge showing accuracy with color coding (pass >85%, warn 60-85%, fail <60%)
+- Auto-analyze on image upload (no manual button needed)
+- Toast message: "Auto-mask applied - This is a starting point" (manages user expectations)
+
+**Technical Details:**
+
+- Semantic position detection (GPT-4o uses "left/center/right" instead of precise coordinates)
+- Region merging disabled (each text region gets separate mask)
+- Line-count preservation in translations
+
 ## Current Sprint Status
 
 | Sprint | Status |
-| Sprints 0-8 | **COMPLETE** |
-| Sprint 9 | PLANNED - VerificationService, Auto-mask |
-| Sprint 10 | PLANNED - Final polish, contest submission |
+| Sprints 0-9 | **COMPLETE** |
+| Sprint 10 | PLANNED - Dynamic prompts, README overhaul, contest submission |
 
 See `docs/SPRINTS.md` for full sprint details and `docs/AI_HANDOFF_PROMPT.md` for AI onboarding.

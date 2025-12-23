@@ -111,67 +111,89 @@ export interface ITextDetectionService {
 }
 
 // =============================================================================
+// Grid Constants (must be before class that uses them)
+// =============================================================================
+
+const GRID_COLS = 8; // A-H
+const GRID_ROWS = 12; // 1-12
+const CELL_WIDTH = 1 / GRID_COLS; // 0.125 (12.5%)
+const CELL_HEIGHT = 1 / GRID_ROWS; // 0.0833 (8.33%)
+
+// =============================================================================
 // GPT-4o Vision Prompt
 // =============================================================================
 
-const VISION_ANALYSIS_PROMPT = `Analyze this image and extract ALL visible text with their positions and styles.
+/**
+ * Semantic position detection prompt
+ *
+ * GPT-4o is bad at precise coordinates but GOOD at describing
+ * spatial relationships in human terms. We ask for:
+ * - Horizontal position: "left", "center-left", "center", "center-right", "right"
+ * - Vertical position: "top", "upper", "middle", "lower", "bottom"
+ * - Size: "small", "medium", "large"
+ *
+ * We then convert these semantic descriptions to coordinates.
+ */
+const VISION_ANALYSIS_PROMPT = `Analyze this image and locate ALL text elements.
 
-Return a JSON object with this EXACT structure:
+For EACH text element, describe its position using these terms:
+
+HORIZONTAL POSITION (where the text CENTER is located):
+- "far-left" = leftmost 20% of image
+- "left" = 20-40% from left
+- "center" = 40-60% (middle)
+- "right" = 60-80% from left
+- "far-right" = rightmost 20%
+
+VERTICAL POSITION (where the text CENTER is located):
+- "top" = top 20%
+- "upper" = 20-40% from top
+- "middle" = 40-60%
+- "lower" = 60-80% from top
+- "bottom" = bottom 20%
+
+TEXT SIZE relative to image:
+- "small" = less than 15% of image width
+- "medium" = 15-30% of image width
+- "large" = more than 30% of image width
+
+Return JSON:
 {
   "textRegions": [
     {
-      "text": "The exact text content",
-      "boundingBox": {
-        "x": 0.1,
-        "y": 0.2,
-        "width": 0.3,
-        "height": 0.05
-      },
+      "text": "YOU ARE",
+      "horizontalPosition": "left",
+      "verticalPosition": "upper",
+      "textSize": "medium",
       "confidence": 0.95,
-      "style": {
-        "fontWeight": "bold",
-        "fontSize": "large",
-        "alignment": "center",
-        "color": "white",
-        "case": "uppercase"
-      },
-      "role": "headline",
-      "order": 1
+      "role": "headline"
+    },
+    {
+      "text": "STRONGER",
+      "horizontalPosition": "left",
+      "verticalPosition": "middle",
+      "textSize": "large",
+      "confidence": 0.95,
+      "role": "headline"
     }
   ],
-  "layout": "app-screenshot",
-  "surfaceTexture": "Description of the background texture (e.g., 'gradient blue to purple', 'solid white', 'colored sticky notes on gray background')",
-  "dominantColors": ["blue", "white", "green"],
-  "hasUIElements": true,
-  "uiElements": ["checkmark icons", "button", "status bar"],
-  "imageDescription": "Brief description of what the image shows"
+  "layout": "sticky-notes",
+  "surfaceTexture": "colored sticky notes on gray background",
+  "dominantColors": ["yellow", "green", "orange", "pink"],
+  "hasUIElements": false,
+  "imageDescription": "Motivational text on stacked sticky notes with dumbbells in background"
 }
 
-IMPORTANT RULES:
-1. Extract ALL visible text, no matter how small
-2. boundingBox coordinates are NORMALIZED (0-1 range) relative to image size
-3. For "role", use:
-   - "headline" for main titles/headers
-   - "subheadline" for secondary titles
-   - "bullet" for bullet points or list items
-   - "cta" for call-to-action buttons
-   - "footer" for footer text/disclaimers
-   - "label" for labels or captions
-   - "other" for miscellaneous text
-4. For "layout", choose the most appropriate:
-   - "app-screenshot" for mobile app UIs
-   - "sticky-notes" for motivational posters with notes
-   - "banner" for marketing banners
-   - "poster" for print posters
-   - "social-media" for social graphics
-   - "product" for product packaging
-   - "presentation" for slides
-   - "unknown" if unclear
-5. "order" should reflect reading order (1 = first to read)
-6. Be VERY accurate with bounding boxes - they will be used to create masks
-7. Include ALL UI elements you see (icons, buttons, etc.) in "uiElements"
+CRITICAL RULES:
+1. Create a SEPARATE entry for EACH distinct text element
+2. Look at where the TEXT actually is, not where the sticky note is
+3. If text is on the LEFT side of the image, use "far-left" or "left"
+4. Be accurate about horizontal position - this is the most important field
 
-Return ONLY the JSON object, no markdown or explanation.`;
+ROLE VALUES: headline, subheadline, bullet, cta, footer, label, other
+LAYOUT VALUES: app-screenshot, sticky-notes, banner, poster, social-media, product, presentation, unknown
+
+Return ONLY valid JSON.`;
 
 // =============================================================================
 // Service Implementation
@@ -249,8 +271,26 @@ export class TextDetectionService implements ITextDetectionService {
       // Parse the JSON response
       const parsed = JSON.parse(content) as RawAnalysisResponse;
 
+      // Debug: Log raw bounding boxes from GPT-4o
+      console.log(`[TextDetectionService] Raw GPT-4o response - ${parsed.textRegions?.length ?? 0} regions:`);
+      parsed.textRegions?.forEach((region, i) => {
+        const box = region.boundingBox;
+        console.log(
+          `  [${i}] "${region.text?.substring(0, 30)}..." box: x=${box?.x?.toFixed(3)}, y=${box?.y?.toFixed(3)}, w=${box?.width?.toFixed(3)}, h=${box?.height?.toFixed(3)}`
+        );
+      });
+
       // Validate and transform the response
       const analysis = this.transformResponse(parsed);
+
+      // Debug: Log validated bounding boxes
+      console.log(`[TextDetectionService] After validation - ${analysis.textRegions.length} regions:`);
+      analysis.textRegions.forEach((region, i) => {
+        const box = region.boundingBox;
+        console.log(
+          `  [${i}] "${region.text.substring(0, 30)}..." box: x=${box.x.toFixed(3)}, y=${box.y.toFixed(3)}, w=${box.width.toFixed(3)}, h=${box.height.toFixed(3)}`
+        );
+      });
 
       console.log(
         `[TextDetectionService] Analysis complete: ${analysis.textRegions.length} text regions detected, layout: ${analysis.layout}`
@@ -296,29 +336,90 @@ export class TextDetectionService implements ITextDetectionService {
   }
 
   /**
+   * Convert semantic position descriptions to bounding box
+   */
+  private semanticToBoundingBox(
+    horizontalPos: string | undefined,
+    verticalPos: string | undefined,
+    textSize: string | undefined
+  ): BoundingBox {
+    // Get horizontal position (default to left if not specified)
+    const hPos = HORIZONTAL_POSITIONS[horizontalPos?.toLowerCase() ?? ""] ?? HORIZONTAL_POSITIONS["left"]!;
+
+    // Get vertical position (default to middle if not specified)
+    const vPos = VERTICAL_POSITIONS[verticalPos?.toLowerCase() ?? ""] ?? VERTICAL_POSITIONS["middle"]!;
+
+    // Get size multipliers (default to medium)
+    const size = TEXT_SIZES[textSize?.toLowerCase() ?? ""] ?? TEXT_SIZES["medium"]!;
+
+    // Calculate width and height
+    const width = Math.min(0.45, hPos.defaultWidth * size.widthMultiplier); // Cap at 45%
+    const height = Math.min(0.20, vPos.defaultHeight * size.heightMultiplier); // Cap at 20%
+
+    // Calculate x, y from center point
+    const x = Math.max(0, Math.min(1 - width, hPos.center - width / 2));
+    const y = Math.max(0, Math.min(1 - height, vPos.center - height / 2));
+
+    console.log(
+      `[TextDetectionService] Semantic "${horizontalPos}/${verticalPos}/${textSize}" -> box: x=${x.toFixed(3)}, y=${y.toFixed(3)}, w=${width.toFixed(3)}, h=${height.toFixed(3)}`
+    );
+
+    return { x, y, width, height };
+  }
+
+  /**
    * Transform and validate the raw GPT-4o response
    */
   private transformResponse(raw: RawAnalysisResponse): ImageAnalysis {
     // Transform text regions with validation
-    const textRegions: TextRegion[] = (raw.textRegions ?? []).map((region, index) => ({
-      text: region.text ?? "",
-      boundingBox: this.validateBoundingBox(region.boundingBox),
-      confidence: Math.min(1, Math.max(0, region.confidence ?? 0.8)),
-      style: region.style
-        ? {
-            fontWeight: this.validateFontWeight(region.style.fontWeight),
-            fontSize: this.validateFontSize(region.style.fontSize),
-            alignment: this.validateAlignment(region.style.alignment),
-            color: region.style.color,
-            case: this.validateCase(region.style.case),
-          }
-        : undefined,
-      role: this.validateRole(region.role),
-      order: region.order ?? index + 1,
-    }));
+    const textRegions: TextRegion[] = (raw.textRegions ?? []).map((region, index) => {
+      // Priority order: semantic position > grid cells > bounding box > default
+      let boundingBox: BoundingBox;
+
+      if (region.horizontalPosition || region.verticalPosition) {
+        // New semantic position format (preferred)
+        boundingBox = this.semanticToBoundingBox(
+          region.horizontalPosition,
+          region.verticalPosition,
+          region.textSize
+        );
+        console.log(`[TextDetectionService] Text "${region.text?.substring(0, 20)}..." uses semantic: h=${region.horizontalPosition}, v=${region.verticalPosition}, size=${region.textSize}`);
+      } else if (region.gridCells && region.gridCells.length > 0) {
+        // Grid cells format (fallback)
+        boundingBox = this.gridCellsToBoundingBox(region.gridCells);
+        console.log(`[TextDetectionService] Text "${region.text?.substring(0, 20)}..." uses grid cells: [${region.gridCells.join(", ")}]`);
+      } else if (region.boundingBox) {
+        // Legacy bounding box format
+        boundingBox = this.validateBoundingBox(region.boundingBox);
+        console.log(`[TextDetectionService] Text "${region.text?.substring(0, 20)}..." uses legacy bounding box`);
+      } else {
+        // No location info - use default
+        boundingBox = { x: 0.25, y: 0.25, width: 0.5, height: 0.5 };
+        console.warn(`[TextDetectionService] Text "${region.text?.substring(0, 20)}..." has no location info, using default`);
+      }
+
+      return {
+        text: region.text ?? "",
+        boundingBox,
+        confidence: Math.min(1, Math.max(0, region.confidence ?? 0.8)),
+        style: region.style
+          ? {
+              fontWeight: this.validateFontWeight(region.style.fontWeight),
+              fontSize: this.validateFontSize(region.style.fontSize),
+              alignment: this.validateAlignment(region.style.alignment),
+              color: region.style.color,
+              case: this.validateCase(region.style.case),
+            }
+          : undefined,
+        role: this.validateRole(region.role),
+        order: region.order ?? index + 1,
+      };
+    });
 
     // Sort by order
     textRegions.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+
+    console.log(`[TextDetectionService] Transformed ${textRegions.length} text regions`);
 
     return {
       textRegions,
@@ -333,17 +434,100 @@ export class TextDetectionService implements ITextDetectionService {
   }
 
   /**
+   * Convert grid cell notation (e.g., "D3") to column/row indices
+   */
+  private parseGridCell(cell: string): { col: number; row: number } | null {
+    const match = cell.match(/^([A-H])(\d{1,2})$/i);
+    if (!match) {
+      console.warn(`[TextDetectionService] Invalid grid cell: ${cell}`);
+      return null;
+    }
+
+    const col = match[1]!.toUpperCase().charCodeAt(0) - 65; // A=0, B=1, ...
+    const row = parseInt(match[2]!, 10) - 1; // 1-based to 0-based
+
+    if (col < 0 || col >= GRID_COLS || row < 0 || row >= GRID_ROWS) {
+      console.warn(`[TextDetectionService] Grid cell out of range: ${cell}`);
+      return null;
+    }
+
+    return { col, row };
+  }
+
+  /**
+   * Convert an array of grid cells to a bounding box
+   * Finds the min/max of all cells to create a rectangular region
+   */
+  private gridCellsToBoundingBox(cells: string[]): BoundingBox {
+    if (!cells || cells.length === 0) {
+      // Default to center of image if no cells
+      return { x: 0.25, y: 0.25, width: 0.5, height: 0.5 };
+    }
+
+    let minCol = GRID_COLS;
+    let maxCol = -1;
+    let minRow = GRID_ROWS;
+    let maxRow = -1;
+
+    for (const cell of cells) {
+      const parsed = this.parseGridCell(cell);
+      if (parsed) {
+        minCol = Math.min(minCol, parsed.col);
+        maxCol = Math.max(maxCol, parsed.col);
+        minRow = Math.min(minRow, parsed.row);
+        maxRow = Math.max(maxRow, parsed.row);
+      }
+    }
+
+    // If no valid cells found, default to center
+    if (maxCol < 0 || maxRow < 0) {
+      return { x: 0.25, y: 0.25, width: 0.5, height: 0.5 };
+    }
+
+    // Convert grid coordinates to normalized bounding box
+    // Add 1 to max because we want to include the entire cell
+    const x = minCol * CELL_WIDTH;
+    const y = minRow * CELL_HEIGHT;
+    const width = (maxCol - minCol + 1) * CELL_WIDTH;
+    const height = (maxRow - minRow + 1) * CELL_HEIGHT;
+
+    console.log(
+      `[TextDetectionService] Grid cells [${cells.join(", ")}] -> box: x=${x.toFixed(3)}, y=${y.toFixed(3)}, w=${width.toFixed(3)}, h=${height.toFixed(3)}`
+    );
+
+    return { x, y, width, height };
+  }
+
+  /**
    * Validate and clamp bounding box values to 0-1 range
+   * Also validates that boxes aren't suspiciously large
    */
   private validateBoundingBox(box?: Partial<BoundingBox>): BoundingBox {
     const clamp = (val: number | undefined, defaultVal: number) =>
       Math.min(1, Math.max(0, val ?? defaultVal));
 
+    let width = clamp(box?.width, 0.2);
+    let height = clamp(box?.height, 0.05);
+
+    // Sanity check: individual text elements rarely span more than 40% of image
+    // If they do, it's likely GPT-4o combined multiple elements
+    const MAX_REASONABLE_WIDTH = 0.5;
+    const MAX_REASONABLE_HEIGHT = 0.15; // Text is typically much shorter than wide
+
+    if (width > MAX_REASONABLE_WIDTH) {
+      console.warn(`[TextDetectionService] Box width ${width} exceeds max ${MAX_REASONABLE_WIDTH}, capping`);
+      width = MAX_REASONABLE_WIDTH;
+    }
+    if (height > MAX_REASONABLE_HEIGHT) {
+      console.warn(`[TextDetectionService] Box height ${height} exceeds max ${MAX_REASONABLE_HEIGHT}, capping`);
+      height = MAX_REASONABLE_HEIGHT;
+    }
+
     return {
       x: clamp(box?.x, 0),
       y: clamp(box?.y, 0),
-      width: clamp(box?.width, 0.2),
-      height: clamp(box?.height, 0.05),
+      width,
+      height,
     };
   }
 
@@ -432,6 +616,13 @@ export class TextDetectionService implements ITextDetectionService {
 interface RawAnalysisResponse {
   textRegions?: Array<{
     text?: string;
+    // Semantic position format (preferred)
+    horizontalPosition?: string;
+    verticalPosition?: string;
+    textSize?: string;
+    // Grid-based format (fallback)
+    gridCells?: string[];
+    // Legacy bounding box format (fallback)
     boundingBox?: Partial<BoundingBox>;
     confidence?: number;
     style?: {
@@ -451,6 +642,40 @@ interface RawAnalysisResponse {
   uiElements?: string[];
   imageDescription?: string;
 }
+
+// =============================================================================
+// Semantic Position Mappings
+// =============================================================================
+
+const HORIZONTAL_POSITIONS: Record<string, { center: number; defaultWidth: number }> = {
+  "far-left": { center: 0.10, defaultWidth: 0.20 },
+  "left": { center: 0.30, defaultWidth: 0.25 },
+  "center-left": { center: 0.35, defaultWidth: 0.25 },
+  "center": { center: 0.50, defaultWidth: 0.30 },
+  "center-right": { center: 0.65, defaultWidth: 0.25 },
+  "right": { center: 0.70, defaultWidth: 0.25 },
+  "far-right": { center: 0.90, defaultWidth: 0.20 },
+};
+
+// Vertical positions are MORE COMPACT than horizontal
+// Most text in images is clustered in the middle 60% (20%-80%)
+// Stacked text (like sticky notes) is especially compact
+const VERTICAL_POSITIONS: Record<string, { center: number; defaultHeight: number }> = {
+  "top": { center: 0.15, defaultHeight: 0.12 },
+  "upper": { center: 0.28, defaultHeight: 0.12 },
+  "upper-middle": { center: 0.38, defaultHeight: 0.12 },
+  "middle": { center: 0.48, defaultHeight: 0.12 },
+  "lower-middle": { center: 0.58, defaultHeight: 0.12 },
+  "lower": { center: 0.68, defaultHeight: 0.12 },
+  "bottom": { center: 0.78, defaultHeight: 0.12 },
+};
+
+const TEXT_SIZES: Record<string, { widthMultiplier: number; heightMultiplier: number }> = {
+  "small": { widthMultiplier: 0.6, heightMultiplier: 0.6 },
+  "medium": { widthMultiplier: 1.0, heightMultiplier: 1.0 },
+  "large": { widthMultiplier: 1.5, heightMultiplier: 1.3 },
+  "xlarge": { widthMultiplier: 2.0, heightMultiplier: 1.5 },
+};
 
 // =============================================================================
 // Factory (Dependency Inversion: depend on abstraction via factory)

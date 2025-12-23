@@ -20,7 +20,8 @@ import sharp from "sharp";
 import { getMontageService } from "~/server/services/montageService";
 import { createImageUploadOrchestrator } from "~/server/services/imageUploadOrchestrator";
 import { createExportOrchestrator } from "~/server/services/exportOrchestrator";
-import { getTextDetectionService } from "~/server/services/textDetectionService";
+import { getTextDetectionService, type TextRegion } from "~/server/services/textDetectionService";
+import { getMaskSuggestionService } from "~/server/services/maskSuggestionService";
 import { SUPPORTED_LOCALES, type LocaleId } from "~/server/domain/value-objects/locale";
 import fs from "fs/promises";
 import path from "path";
@@ -228,6 +229,156 @@ export const projectRouter = createTRPCRouter({
           }>,
           analyzedAt: analysis.analyzedAt,
         },
+      };
+    }),
+
+  /**
+   * Get suggested mask from image analysis (Sprint 9)
+   *
+   * Uses detected text regions to generate clean rectangular masks.
+   * Requires image analysis to exist first (run analyzeImage).
+   */
+  getSuggestedMask: publicProcedure
+    .input(projectIdSchema)
+    .query(async ({ ctx, input }) => {
+      const fileStore = createFileStore(input.projectId);
+      const imageAnalysisRepo = new PrismaImageAnalysisRepository(ctx.db);
+      const maskSuggestionService = getMaskSuggestionService();
+
+      // Get base image for dimensions
+      const baseImageBuffer = await fileStore.getBaseImage();
+      if (!baseImageBuffer) {
+        return { suggestion: null, error: "No base image found" };
+      }
+
+      // Get image dimensions
+      const metadata = await sharp(baseImageBuffer).metadata();
+      if (!metadata.width || !metadata.height) {
+        return { suggestion: null, error: "Could not determine image dimensions" };
+      }
+
+      // Get image analysis
+      const analysis = await imageAnalysisRepo.findByProjectId(input.projectId);
+      if (!analysis) {
+        return { suggestion: null, error: "No image analysis found - enable Vision Mode first" };
+      }
+
+      // Parse text regions
+      const textRegions = JSON.parse(analysis.textRegions) as TextRegion[];
+      if (textRegions.length === 0) {
+        return { suggestion: null, error: "No text regions detected in image" };
+      }
+
+      console.log(
+        `[getSuggestedMask] Generating mask suggestion for ${textRegions.length} regions`
+      );
+
+      // Generate mask suggestion
+      const suggestion = await maskSuggestionService.generateSuggestion({
+        analysis: {
+          textRegions,
+          layout: analysis.layout as "app-screenshot" | "sticky-notes" | "banner" | "poster" | "social-media" | "product" | "presentation" | "unknown",
+          surfaceTexture: analysis.surfaceTexture,
+          dominantColors: JSON.parse(analysis.dominantColors) as string[],
+          hasUIElements: analysis.hasUIElements,
+          uiElements: analysis.uiElements ? JSON.parse(analysis.uiElements) as string[] : undefined,
+          imageDescription: analysis.imageDescription,
+          analyzedAt: analysis.analyzedAt,
+        },
+        imageWidth: metadata.width,
+        imageHeight: metadata.height,
+      });
+
+      console.log(
+        `[getSuggestedMask] Generated mask with ${suggestion.regions.length} regions, ${suggestion.coverage.toFixed(1)}% coverage`
+      );
+
+      return {
+        suggestion: {
+          maskBase64: `data:image/png;base64,${suggestion.maskBuffer.toString("base64")}`,
+          regions: suggestion.regions.map((r) => ({
+            x: r.x,
+            y: r.y,
+            width: r.width,
+            height: r.height,
+            label: r.label,
+          })),
+          coverage: suggestion.coverage,
+          regionCount: suggestion.regions.length,
+        },
+        error: null,
+      };
+    }),
+
+  /**
+   * Apply suggested mask to project (Sprint 9)
+   *
+   * Saves the suggested mask as the project's mask.
+   */
+  applySuggestedMask: publicProcedure
+    .input(projectIdSchema)
+    .mutation(async ({ ctx, input }) => {
+      const fileStore = createFileStore(input.projectId);
+      const maskRepo = new PrismaMaskRepository(ctx.db);
+      const imageAnalysisRepo = new PrismaImageAnalysisRepository(ctx.db);
+      const maskSuggestionService = getMaskSuggestionService();
+
+      // Get base image for dimensions
+      const baseImageBuffer = await fileStore.getBaseImage();
+      if (!baseImageBuffer) {
+        throw new Error("No base image found");
+      }
+
+      // Get image dimensions
+      const metadata = await sharp(baseImageBuffer).metadata();
+      if (!metadata.width || !metadata.height) {
+        throw new Error("Could not determine image dimensions");
+      }
+
+      // Get image analysis
+      const analysis = await imageAnalysisRepo.findByProjectId(input.projectId);
+      if (!analysis) {
+        throw new Error("No image analysis found - enable Vision Mode first");
+      }
+
+      // Parse text regions
+      const textRegions = JSON.parse(analysis.textRegions) as TextRegion[];
+      if (textRegions.length === 0) {
+        throw new Error("No text regions detected in image");
+      }
+
+      console.log(
+        `[applySuggestedMask] Applying suggested mask for ${textRegions.length} regions`
+      );
+
+      // Generate mask suggestion
+      const suggestion = await maskSuggestionService.generateSuggestion({
+        analysis: {
+          textRegions,
+          layout: analysis.layout as "app-screenshot" | "sticky-notes" | "banner" | "poster" | "social-media" | "product" | "presentation" | "unknown",
+          surfaceTexture: analysis.surfaceTexture,
+          dominantColors: JSON.parse(analysis.dominantColors) as string[],
+          hasUIElements: analysis.hasUIElements,
+          uiElements: analysis.uiElements ? JSON.parse(analysis.uiElements) as string[] : undefined,
+          imageDescription: analysis.imageDescription,
+          analyzedAt: analysis.analyzedAt,
+        },
+        imageWidth: metadata.width,
+        imageHeight: metadata.height,
+      });
+
+      // Save the mask
+      const savedPath = await fileStore.saveMaskImage(suggestion.maskBuffer);
+      const mask = await maskRepo.update(input.projectId, savedPath);
+
+      console.log(
+        `[applySuggestedMask] Saved suggested mask with ${suggestion.regions.length} regions`
+      );
+
+      return {
+        mask,
+        regionCount: suggestion.regions.length,
+        coverage: suggestion.coverage,
       };
     }),
 

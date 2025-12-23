@@ -9,16 +9,16 @@
 
 import { UploadSidebar } from "../sidebar";
 
-interface UploadStepProps {
+interface UploadStepSidebarProps {
   // State
   hasBaseImage: boolean;
-  baseImageUrl: string | null;
   isUploading: boolean;
   isDemoLoading: boolean;
 
-  // Canvas dimensions
-  canvasWidth: number;
-  canvasHeight: number;
+  // Analysis state (auto-runs after upload)
+  isAnalyzing?: boolean;
+  hasAnalysis?: boolean;
+  detectedTextCount?: number;
 
   // Handlers
   onFileSelect: (e: React.ChangeEvent<HTMLInputElement>) => void;
@@ -26,19 +26,31 @@ interface UploadStepProps {
   onContinue: () => void;
 }
 
+interface UploadStepCanvasProps {
+  baseImageUrl: string | null;
+  canvasWidth: number;
+  canvasHeight: number;
+}
+
 export function UploadStepSidebar({
   hasBaseImage,
   isUploading,
   isDemoLoading,
+  isAnalyzing,
+  hasAnalysis,
+  detectedTextCount,
   onFileSelect,
   onLoadDemo,
   onContinue,
-}: Omit<UploadStepProps, "baseImageUrl" | "canvasWidth" | "canvasHeight">) {
+}: UploadStepSidebarProps) {
   return (
     <UploadSidebar
       hasBaseImage={hasBaseImage}
       isUploading={isUploading}
       isDemoLoading={isDemoLoading}
+      isAnalyzing={isAnalyzing}
+      hasAnalysis={hasAnalysis}
+      detectedTextCount={detectedTextCount}
       onFileSelect={onFileSelect}
       onLoadDemo={onLoadDemo}
       onContinue={onContinue}
@@ -47,11 +59,10 @@ export function UploadStepSidebar({
 }
 
 export function UploadStepCanvas({
-  hasBaseImage,
   baseImageUrl,
   canvasWidth,
   canvasHeight,
-}: Pick<UploadStepProps, "hasBaseImage" | "baseImageUrl" | "canvasWidth" | "canvasHeight">) {
+}: UploadStepCanvasProps) {
   return (
     <div className="flex items-center justify-center h-full">
       {baseImageUrl ? (

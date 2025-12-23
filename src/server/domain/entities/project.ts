@@ -30,6 +30,11 @@ export interface Mask {
 }
 
 /**
+ * Verification status for translation accuracy
+ */
+export type VerificationStatus = "pass" | "warn" | "fail";
+
+/**
  * Variant entity (localized output)
  */
 export interface Variant {
@@ -42,6 +47,10 @@ export interface Variant {
   driftStatus: DriftStatus;
   modelUsed: string | null;
   createdAt: Date;
+  // Verification fields (Sprint 9)
+  translationAccuracy: number | null;
+  verificationStatus: VerificationStatus | null;
+  verificationDetails: string | null; // JSON string of VerificationResult
 }
 
 /**

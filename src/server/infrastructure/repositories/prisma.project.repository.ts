@@ -197,6 +197,26 @@ export class PrismaVariantRepository implements IVariantRepository {
     await this.db.variant.deleteMany({ where: { projectId } });
   }
 
+  /**
+   * Update verification data for a variant (Sprint 9)
+   */
+  async updateVerification(
+    id: string,
+    translationAccuracy: number,
+    verificationStatus: "pass" | "warn" | "fail",
+    verificationDetails: string
+  ): Promise<Variant> {
+    const result = await this.db.variant.update({
+      where: { id },
+      data: {
+        translationAccuracy,
+        verificationStatus,
+        verificationDetails,
+      },
+    });
+    return this.mapToVariant(result);
+  }
+
   private mapToVariant(data: {
     id: string;
     projectId: string;
@@ -207,6 +227,9 @@ export class PrismaVariantRepository implements IVariantRepository {
     driftStatus: string;
     modelUsed: string | null;
     createdAt: Date;
+    translationAccuracy?: number | null;
+    verificationStatus?: string | null;
+    verificationDetails?: string | null;
   }): Variant {
     return {
       id: data.id,
@@ -218,6 +241,9 @@ export class PrismaVariantRepository implements IVariantRepository {
       driftStatus: data.driftStatus as DriftStatus,
       modelUsed: data.modelUsed,
       createdAt: data.createdAt,
+      translationAccuracy: data.translationAccuracy ?? null,
+      verificationStatus: (data.verificationStatus as "pass" | "warn" | "fail") ?? null,
+      verificationDetails: data.verificationDetails ?? null,
     };
   }
 }
@@ -360,6 +386,9 @@ export class PrismaProjectAggregateRepository
         driftStatus: v.driftStatus as DriftStatus,
         modelUsed: v.modelUsed,
         createdAt: v.createdAt,
+        translationAccuracy: v.translationAccuracy ?? null,
+        verificationStatus: (v.verificationStatus as "pass" | "warn" | "fail") ?? null,
+        verificationDetails: v.verificationDetails ?? null,
       })),
       imageAnalysis: result.imageAnalysis
         ? {

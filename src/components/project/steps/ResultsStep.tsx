@@ -17,11 +17,13 @@ interface ResultsStepSidebarProps {
   showOverlay: boolean;
   isExporting: boolean;
   isRegenerating: string | null;
+  isVerifying: string | null;
   onVariantSelect: (variant: LocaleId | "original") => void;
   onToggleOverlay: () => void;
   onDownloadVariant: (locale: LocaleId) => void;
   onDownloadOriginal: () => void;
   onRegenerate: (locale: LocaleId) => void;
+  onVerify: (locale: LocaleId) => void;
   onExportZip: () => void;
   onExportMontage: () => void;
 }
@@ -43,11 +45,13 @@ export function ResultsStepSidebar({
   showOverlay,
   isExporting,
   isRegenerating,
+  isVerifying,
   onVariantSelect,
   onToggleOverlay,
   onDownloadVariant,
   onDownloadOriginal,
   onRegenerate,
+  onVerify,
   onExportZip,
   onExportMontage,
 }: ResultsStepSidebarProps) {
@@ -58,11 +62,13 @@ export function ResultsStepSidebar({
       showOverlay={showOverlay}
       isExporting={isExporting}
       isRegenerating={isRegenerating}
+      isVerifying={isVerifying}
       onVariantSelect={onVariantSelect}
       onToggleOverlay={onToggleOverlay}
       onDownloadVariant={onDownloadVariant}
       onDownloadOriginal={onDownloadOriginal}
       onRegenerate={onRegenerate}
+      onVerify={onVerify}
       onExportZip={onExportZip}
       onExportMontage={onExportMontage}
     />

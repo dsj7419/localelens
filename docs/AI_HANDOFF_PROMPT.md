@@ -9,64 +9,83 @@
 ## CURRENT STATUS (Update this section after each work session)
 
 | Field | Value |
-| **Last Updated** | 2025-12-22 |
-| **Current Sprint** | Sprint 8 - Vision-Powered Text Detection Pipeline |
-| **Sprint Status** | COMPLETE - All features implemented and bugs fixed |
+| **Last Updated** | 2025-12-23 |
+| **Current Sprint** | Sprint 10 - Contest Submission Polish |
+| **Sprint Status** | PLANNED - Ready to start |
 | **Blocking Issues** | None |
-| **Next Action** | Sprint 9: VerificationService and Auto-mask suggestion |
+| **Next Action** | Dynamic prompt generation, README overhaul, diverse image testing |
 
-### Completed in This Session (Sprint 8)
+### Completed in Last Session (Sprint 9 - COMPLETE)
 
-**Core Vision Pipeline:**
+**VerificationService (NEW):**
 
-- ✅ `TextDetectionService` — GPT-4o Vision text extraction with bounding boxes
-- ✅ `TranslationService` — Dynamic text translation with length constraints
-- ✅ `DynamicPromptBuilder` — Layout-aware prompt templates (sticky notes, banners, etc.)
-- ✅ `ImageAnalysis` Prisma model — Stores detected regions in database
-- ✅ `analyzeImage` mutation — API endpoint for image analysis
-- ✅ `generateWithVision` mutation — Vision pipeline variant generation
-- ✅ `generateAllWithVision` mutation — Batch Vision generation
+- `src/server/services/verificationService.ts` — GPT-4o Vision re-read verification
+- Levenshtein distance for fuzzy text matching
+- Match status thresholds (match >95%, partial 70-95%, mismatch <70%)
+- Overall verification status (pass >85%, warn 60-85%, fail <60%)
+- Factory pattern with interface segregation
 
-**UI Improvements:**
+**MaskSuggestionService (NEW):**
 
-- ✅ Vision Mode toggle with auto-analyze (no manual button needed)
-- ✅ Clear visual feedback during analysis ("Analyzing..." → "Text Detected")
-- ✅ Detection count display ("X regions found")
+- `src/server/services/maskSuggestionService.ts` — Auto-generate clean rectangular masks
+- Converts bounding boxes to pixel coordinates with padding
+- Region merging DISABLED (keeps separate text elements separate - ED-054)
+- PNG generation with alpha channel (Sharp)
 
-**Bug Fixes:**
+**TranslationService Enhancement:**
 
-- ✅ Fixed mask aspect ratio bug — Canvas now dynamically sizes to match any image resolution
-- ✅ Fixed Turbopack build — Switched to `next build --turbo` for Windows compatibility
-- ✅ Base image dimensions now returned from API for proper scaling
+- Line-count preservation constraint added to prompts
+- Validation with warning logging for count mismatches
+
+**Database Updates:**
+
+- Added `translationAccuracy`, `verificationStatus`, `verificationDetails` to Variant model
+- `updateVerification` method in repository
+
+**API Endpoints (NEW):**
+
+- `variant.verify` — Verify translation accuracy for a generated variant
+- `project.getSuggestedMask` — Get auto-generated mask from detected regions
+- `project.applySuggestedMask` — Apply suggested mask to project
+
+**UI Updates:**
+
+- `VerificationBadge` component with color-coded accuracy display
+- "Verify Translation" button in ResultsSidebar
+- "Use Suggested Mask" button in MaskSidebar (when analysis available)
+- Translation Accuracy displayed alongside Drift Score
+- Toast message: "Auto-mask applied (X regions) - This is a starting point" (ED-053)
+
+**Sprint 9 Refinements (Same Session):**
+
+- Auto-analyze on image upload (ED-052) — Analysis triggers when base image is uploaded
+- Semantic position detection (ED-051) — GPT-4o uses "left/center/right" instead of coordinates
+- Continue button fix (ED-055) — Refetch project before mask to enable button properly
+- Disabled region merging (ED-054) — Each text region gets its own mask
+- Auto-mask as "starting point" UX (ED-053) — Toast message sets correct expectations
 
 **Quality:**
 
-- ✅ TypeScript strict mode passes
-- ✅ All documentation updated
+- TypeScript strict mode passes
+- 55 engineering decisions now documented (ED-001 through ED-055)
 
-### Discoveries from Sprint 8 Testing (IMPORTANT)
+### Sprint 8 Context (Previous Session)
 
-**Issues Found:**
+**Core Vision Pipeline:**
 
-1. **Spanish 3→4 line problem**: Translation combined "THAN YOU THINK" into one line ("DE LO QUE CREES"), leaving 4th sticky note empty. TranslationService needs line-count enforcement.
-2. **Brush stroke artifacts**: Hand-drawn masks create "smudge" effects in output. Auto-mask with clean rectangles will fix this.
-3. **Predefined layout templates**: Current `DynamicPromptBuilder` uses hardcoded templates (sticky-notes, app-screenshot, etc.). Sprint 10 should make GPT-4o generate preservation instructions dynamically.
+- `TextDetectionService` — GPT-4o Vision text extraction with bounding boxes
+- `TranslationService` — Dynamic text translation with length constraints
+- `DynamicPromptBuilder` — Layout-aware prompt templates
+- Vision Mode toggle with auto-analyze
 
-**What Worked Well:**
+### What Sprint 10 Should Cover
 
-- Vision pipeline correctly identified image as "sticky-notes" layout
-- French translation split perfectly into 4 lines
-- Colors and background preserved correctly
-- RTL Arabic rendered properly (though had some redundancy)
-
-### Next Session Should (Sprint 9)
-
-- [ ] Create `src/server/services/verificationService.ts` — Re-read generated images
-- [ ] Create `src/server/services/maskSuggestionService.ts` — Auto-mask from regions (CLEAN RECTANGLES)
-- [ ] Add line-count preservation to `TranslationService` — Force N inputs = N outputs
-- [ ] Add Translation Accuracy metric to results
-- [ ] Add "Accept Suggested Mask" button on Mask step
-- [ ] Test with diverse images
+- [ ] Remove predefined layout templates from DynamicPromptBuilder
+- [ ] Have GPT-4o generate `preservationInstructions` and `localizationGuidance` dynamically
+- [ ] Test with 8+ diverse image types (app screenshots, posters, banners, memes, etc.)
+- [ ] Update README with universal image support
+- [ ] Create demo video/GIF showing workflow
+- [ ] Final polish and contest submission
 
 ### Sprint 10 Architecture Goal (WORLD-CLASS)
 
@@ -92,67 +111,99 @@ I need you to take over development of LocaleLens, an OpenAI Image Generation AP
 Read these files IN ORDER to understand the project:
 
 1. `CLAUDE.md` - Quick project overview and architecture
-2. `docs/SPRINTS.md` - Sprint status (Sprints 0-8 COMPLETE, Sprint 9 next)
-3. `docs/ENGINEERING_DECISIONS.md` - 40+ engineering decisions with rationale
+2. `docs/SPRINTS.md` - Sprint status (Sprints 0-9 COMPLETE, Sprint 10 next)
+3. `docs/ENGINEERING_DECISIONS.md` - 55 engineering decisions with rationale
 4. `docs/CONTEST_SPEC.md` - Contest requirements and win strategy
 5. `docs/FINDINGS.md` - API discoveries and lessons learned
 
 After reading, confirm:
-- Sprint 8 (Vision Pipeline) is COMPLETE
+- Sprints 0-9 are COMPLETE
 - You understand the two-model pipeline: GPT-4o Vision + gpt-image-1.5
-- You're ready to start Sprint 9
+- You understand the verification and auto-mask features (Sprint 9)
+- You're ready to start Sprint 10
 
-## Step 2: What's Already Built (Sprint 8 - COMPLETE)
+## Step 2: What's Already Built (Sprints 8-9 - COMPLETE)
 
-The Vision pipeline is fully implemented:
+### Vision Pipeline (Sprint 8):
 
 **Services:**
-- `src/server/services/textDetectionService.ts` - GPT-4o Vision text extraction
+- `src/server/services/textDetectionService.ts` - GPT-4o Vision text extraction (uses semantic positions)
 - `src/server/services/translationService.ts` - Dynamic translation with length constraints
 - `src/server/domain/services/dynamicPromptBuilder.ts` - Layout-aware prompt templates
 
 **API Endpoints:**
-- `project.analyzeImage` - Analyze image with GPT-4o Vision
+- `project.analyzeImage` - Analyze image with GPT-4o Vision (auto-runs on upload)
 - `project.getImageAnalysis` - Retrieve stored analysis
 - `project.getBaseImage` - Returns image + dimensions for aspect ratio handling
 - `variant.generateWithVision` - Single locale Vision generation
 - `variant.generateAllWithVision` - Batch Vision generation
 
+### Verification & Auto-Mask (Sprint 9):
+
+**Services:**
+- `src/server/services/verificationService.ts` - GPT-4o re-read verification with Levenshtein matching
+- `src/server/services/maskSuggestionService.ts` - Auto-generate rectangular masks from detected regions
+
+**API Endpoints:**
+- `variant.verify` - Verify translation accuracy, returns VerificationResult
+- `project.getSuggestedMask` - Get auto-generated mask suggestion
+- `project.applySuggestedMask` - Apply suggested mask to project
+
 **UI Features:**
 - Vision Mode toggle in GenerateSidebar (purple toggle, auto-analyzes on enable)
-- Analysis status display with spinner → checkmark transition
-- Detection count display ("X regions found")
+- "Use Suggested Mask" button in MaskSidebar (shows when analysis available)
+- "Verify Translation" button in ResultsSidebar
+- VerificationBadge showing accuracy percentage with color coding
+- Toast message on auto-mask: "This is a starting point — refine if needed"
 - Dynamic canvas sizing (works with ANY image resolution)
 
-## Step 3: Your Mission - Sprint 9
+## Step 3: Your Mission - Sprint 10
 
 **CONTEST DEADLINE: January 3, 2026**
 
-Sprint 9 focuses on quality assurance and automation:
+Sprint 10 focuses on final polish and contest submission:
 
-### 1) VerificationService (NEW)
-File: `src/server/services/verificationService.ts`
+### 1) Dynamic Prompt Generation (ARCHITECTURAL UPGRADE)
+File: `src/server/domain/services/dynamicPromptBuilder.ts`
 
-After generating a variant, re-read it with GPT-4o Vision to verify the translation rendered correctly:
-- Extract text from generated image
-- Compare to expected translations
-- Calculate "Translation Accuracy" percentage
-- Flag mismatches for user review
+Currently uses predefined layout templates (sticky-notes, app-screenshot, banner, etc.).
 
-### 2) MaskSuggestionService (NEW)
-File: `src/server/services/maskSuggestionService.ts`
+GOAL: Have GPT-4o generate preservation/localization instructions dynamically:
+```typescript
+// Add to ImageAnalysis in TextDetectionService:
+{
+  preservationInstructions: "The 4 colored sticky notes must keep their exact colors...",
+  localizationGuidance: "Each note contains one phrase. Replace text centered..."
+}
+```
 
-Use detected text regions to auto-generate mask suggestions:
-- Convert bounding boxes to mask regions
-- Add appropriate padding
-- Generate combined mask buffer
-- Show "Accept Suggested Mask" button in UI
+This makes the system truly universal — works for ANY image type.
 
-### 3) UI Updates
-- Display Translation Accuracy alongside Drift Score in results
-- Show verification mismatches if any
-- Add "Accept Suggested Mask" button in mask editor
-- Visual overlay of detected text regions
+### 2) README Overhaul
+- Update with universal image support (not just demo screenshots)
+- Explain two-model pipeline (GPT-4o + gpt-image-1.5)
+- Updated screenshots showing diverse image support
+- Architecture diagram
+
+### 3) Diverse Image Testing
+Test with multiple image types to prove universal support:
+- App store screenshots (original use case)
+- Motivational posters (sticky notes)
+- Marketing banners
+- Social media graphics
+- Product packaging
+- Memes / informal graphics
+
+Document results in `docs/TESTING_RESULTS.md`
+
+### 4) Demo Video/GIF
+Create compelling demo showing:
+- Upload custom image
+- Automatic text detection
+- Auto-mask suggestion
+- Streaming generation
+- 0% drift result
+- Translation verification
 
 ## Step 4: Coding Standards (NON-NEGOTIABLE)
 
@@ -178,8 +229,8 @@ Use detected text regions to auto-generate mask suggestions:
 
 ## Step 5: Before Writing ANY Code
 
-1. Read the existing Sprint 8 services to understand the patterns
-2. Check `docs/ENGINEERING_DECISIONS.md` for prior decisions
+1. Read the existing Sprint 8-9 services to understand the patterns
+2. Check `docs/ENGINEERING_DECISIONS.md` for prior decisions (55 so far!)
 3. Plan your approach and explain it
 4. Ask clarifying questions if requirements are unclear
 
@@ -201,45 +252,48 @@ pnpm typecheck        # TypeScript validation (MUST PASS)
 pnpm build            # Production build (uses Turbopack)
 ```
 
-## Key Files for Sprint 9
-
-**To Create:**
-
-- `src/server/services/verificationService.ts` - Re-read and verify translations
-- `src/server/services/maskSuggestionService.ts` - Auto-mask from regions
+## Key Files for Sprint 10
 
 **To Modify:**
 
-- `src/components/project/sidebar/ResultsSidebar.tsx` - Add accuracy display
-- `src/components/project/sidebar/MaskSidebar.tsx` - Add suggested mask button
-- `src/server/api/routers/variant.ts` - Add verification endpoint
-- `src/server/api/routers/project.ts` - Add mask suggestion endpoint
+- `src/server/services/textDetectionService.ts` - Add preservationInstructions/localizationGuidance
+- `src/server/domain/services/dynamicPromptBuilder.ts` - Remove layout templates, use GPT-4o generated instructions
+- `README.md` - Complete overhaul
 
-**Reference (Sprint 8 patterns):**
+**To Create:**
 
-- `src/server/services/textDetectionService.ts` - GPT-4o Vision usage pattern
-- `src/server/services/translationService.ts` - Service interface pattern
-- `src/app/project/[id]/page.tsx` - Dynamic canvas dimensions pattern
+- `docs/TESTING_RESULTS.md` - Diverse image test results
 
-## Recent Bug Fixes (Important Context)
+**Reference (Sprint 9 patterns):**
 
-1. **Mask Aspect Ratio** (ED-043): Canvas now calculates dimensions dynamically based on base image aspect ratio. See `calculateCanvasDimensions()` in page.tsx.
+- `src/server/services/verificationService.ts` - GPT-4o Vision usage pattern
+- `src/server/services/maskSuggestionService.ts` - Service interface pattern
+- `src/app/project/[id]/page.tsx` - Dynamic canvas, auto-analyze, toast patterns
 
-2. **Vision Mode UX** (ED-044): Auto-analyzes when toggle is enabled. No separate button needed. Uses `useEffect` to trigger analysis automatically.
+## Important Bug Fixes (Context)
 
-3. **Turbopack Build** (ED-042): Windows has permission issues with legacy webpack. Build now uses `--turbo` flag.
+1. **Semantic Positions** (ED-051): GPT-4o uses "left/center/right" descriptions instead of precise coordinates. Coordinates are derived from semantic positions.
 
-## Now: Begin Sprint 9
+2. **Auto-Analyze on Upload** (ED-052): Analysis triggers in `onBaseImageChange` callback when base image is uploaded. Existing analysis checked on page load.
+
+3. **Auto-Mask as Starting Point** (ED-053): Toast message informs users to refine the auto-mask. Sets correct expectations.
+
+4. **Region Merging Disabled** (ED-054): Each text region gets its own mask rectangle. Merging was combining separate text elements.
+
+5. **Continue Button Fix** (ED-055): `queries.refetchProject()` must run BEFORE `refetchMask()` to update hasMask state.
+
+6. **Turbopack Build** (ED-042): Windows has permission issues with legacy webpack. Build now uses `--turbo` flag.
+
+## Now: Begin Sprint 10
 
 Please read the documentation files listed in Step 1 and confirm:
 
 1. You understand the project architecture
-2. Sprint 8 is complete (Vision pipeline working)
-3. You're ready to implement Sprint 9 (Verification + Auto-mask)
+2. Sprints 0-9 are complete (Vision pipeline, verification, auto-mask all working)
+3. You're ready to implement Sprint 10 (dynamic prompts, README, testing)
 
 Use ultrathink mode. Take your time. Quality over speed. We want to WIN this contest!
-
-```text
+```
 
 ---
 
@@ -262,3 +316,5 @@ The goal is that ANY AI can pick up exactly where you left off.
 | 2025-12-22 | 1.0 | Initial handoff prompt created |
 | 2025-12-22 | 1.1 | Sprint 8 COMPLETE - Two-model Vision pipeline implemented |
 | 2025-12-22 | 1.2 | Bug fixes: mask aspect ratio, Vision auto-analyze, Turbopack build |
+| 2025-12-22 | 1.3 | Sprint 9 COMPLETE - VerificationService, MaskSuggestionService implemented |
+| 2025-12-23 | 1.4 | Sprint 9 refinements: semantic positions, auto-analyze on upload, toast message, Continue button fix |
