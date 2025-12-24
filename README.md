@@ -414,3 +414,4 @@ Full license text: [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0
 ---
 
 **LocaleLens** — Intelligent image localization powered by GPT-4o Vision and gpt-image-1.5
+
